@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Code Assist CLI - Interactive Commands Module
+Code Assist CLI - Simplified version that routes everything through Control Agent
 AI-powered development companion with parser and agent integration
 """
 
@@ -11,91 +11,55 @@ from rich.prompt import Prompt, Confirm
 from rich.table import Table
 from rich.text import Text
 from rich.align import Align
-from rich.progress import Progress, SpinnerColumn, TextColumn
 import time
 import sys
 import os
 from pathlib import Path
 
-# Initialize console first, before any error handling
+# Initialize console
 console = Console()
 
-# Import parsers with fallback
-PARSERS_AVAILABLE = True
-AGENTS_AVAILABLE = True
+# Import control agent with fallback
+CONTROL_AGENT_AVAILABLE = True
 
 try:
-    from parsers.base_parser import BaseParser
-    from parsers.python_parser import PythonParser
-    from parsers.javascript_parser import JavaScriptParser
-    from parsers.java_parser import JavaParser
-except ImportError as e:
-    PARSERS_AVAILABLE = False
-    console.print(f"[yellow]Info: Parsers not fully available, using fallback mode[/yellow]")
-
-try:
-    from agents.base_agent import BaseAgent
-    from agents.test_agent import TestAgent
-    from agents.refactor_agent import RefactorAgent
-    from agents.debug_agent import DebugAgent
-    from agents.output_agent import OutputAgent
-    from agents.parser_agent import ParserAgent
-    from agents.planner_agent import PlannerAgent
     from agents.control_agent import ControlAgent
-except ImportError as e:
-    AGENTS_AVAILABLE = False
-    console.print(f"[yellow]Info: Agents not fully available, using fallback mode[/yellow]")
+except ImportError:
+    CONTROL_AGENT_AVAILABLE = False
+    console.print(f"[yellow]Info: Control agent not available, using fallback mode[/yellow]")
 
-
-# Fallback classes for when parsers/agents are not available
-class FallbackParser:
-    """Fallback parser when actual parsers are not available"""
-    def parse(self, content, file_path):
-        return {
-            'file_path': file_path,
-            'content': content,
-            'lines': len(content.split('\n')),
-            'chars': len(content),
-            'parsed': True,
-            'type': 'fallback'
-        }
-
-class FallbackAgent:
-    """Fallback agent when actual agents are not available"""
-    def process(self, parsed_data, project_path):
+class FallbackControlAgent:
+    """Fallback control agent when actual control agent is not available"""
+    
+    def process_request(self, service_type, target_path):
         return {
             'status': 'completed',
-            'agent': 'Fallback Agent',
-            'files_processed': len(parsed_data),
-            'project_path': project_path,
-            'message': f"Basic processing completed for {len(parsed_data)} files",
-            'note': 'Install proper agents for enhanced functionality'
+            'service': service_type,
+            'files_processed': 1,
+            'results': {
+                'message': f'Basic {service_type} processing completed for {target_path}',
+                'note': 'Install proper control agent for enhanced functionality'
+            }
         }
 
-class CLIHandler:
-    """Handles CLI interactions, file parsing, and agent coordination"""
+class SimplifiedCLI:
+    """Simplified CLI that routes everything through Control Agent"""
     
     def __init__(self):
+        # Initialize control agent
+        if CONTROL_AGENT_AVAILABLE:
+            self.control_agent = ControlAgent()
+        else:
+            self.control_agent = FallbackControlAgent()
+        
         self.services = {
-            '1': {'name': 'Testing Services', 'emoji': '🧪', 'desc': 'Run tests, generate test cases', 'agent': 'test'},
-            '2': {'name': 'Code Refactoring', 'emoji': '🔧', 'desc': 'Improve and optimize code structure', 'agent': 'refactor'},
-            '3': {'name': 'Debug Assistant', 'emoji': '🐛', 'desc': 'Find and fix bugs in your code', 'agent': 'debug'},
-            '4': {'name': 'Documentation', 'emoji': '📚', 'desc': 'Generate docs and comments', 'agent': 'output'},
-            '5': {'name': 'Code Analysis', 'emoji': '🔍', 'desc': 'Analyze and parse code structure', 'agent': 'parser'},
-            '6': {'name': 'Project Planning', 'emoji': '📋', 'desc': 'Plan development tasks', 'agent': 'planner'},
+            '1': {'name': 'Testing Services', 'emoji': '🧪', 'desc': 'Run tests, generate test cases'},
+            '2': {'name': 'Code Refactoring', 'emoji': '🔧', 'desc': 'Improve and optimize code structure'},
+            '3': {'name': 'Debug Assistant', 'emoji': '🐛', 'desc': 'Find and fix bugs in your code'},
+            '4': {'name': 'Documentation', 'emoji': '📚', 'desc': 'Generate docs and comments'},
+            '5': {'name': 'Code Analysis', 'emoji': '🔍', 'desc': 'Analyze and parse code structure'},
+            '6': {'name': 'Project Planning', 'emoji': '📋', 'desc': 'Plan development tasks'},
         }
-        
-        self.parsers = {
-            '.py': 'python',
-            '.js': 'javascript', 
-            '.jsx': 'javascript',
-            '.ts': 'javascript',
-            '.tsx': 'javascript',
-            '.java': 'java',
-        }
-        
-        self.current_path = None
-        self.parsed_data = None
     
     def show_banner(self):
         """Display welcome banner"""
@@ -136,7 +100,7 @@ class CLIHandler:
                 f"[{key}]",
                 f"{service['emoji']} {service['name']}",
                 service['desc'],
-                f"🤖 {service['agent']}_agent"
+                f"🤖 via_control"
             )
         
         table.add_row("[q]", "🚪 Quit", "Exit the application", "")
@@ -174,201 +138,36 @@ class CLIHandler:
                     return None
                 continue
             
-            self.current_path = path
             console.print(f"[green]✅ Path selected: {path}[/green]")
-            return path
-    
-    def detect_file_type(self, file_path):
-        """Detect file type based on extension"""
-        suffix = file_path.suffix.lower()
-        return self.parsers.get(suffix, 'unknown')
-    
-    def get_parser(self, file_type):
-        """Get appropriate parser for file type"""
-        if not PARSERS_AVAILABLE:
-            return FallbackParser()
-            
-        try:
-            if file_type == 'python':
-                return PythonParser()
-            elif file_type == 'javascript':
-                return JavaScriptParser()
-            elif file_type == 'java':
-                return JavaParser()
-            else:
-                return BaseParser()
-        except:
-            console.print(f"[yellow]Warning: Using fallback parser for {file_type}[/yellow]")
-            return FallbackParser()
-    
-    def parse_files(self, path):
-        """Parse files in the given path"""
-        console.print("\n[bold blue]🔍 Analyzing Files...[/bold blue]")
-        
-        files_to_parse = []
-        
-        if path.is_file():
-            files_to_parse = [path]
-        else:
-            # Get all code files in directory
-            for ext in self.parsers.keys():
-                files_to_parse.extend(path.rglob(f"*{ext}"))
-        
-        if not files_to_parse:
-            console.print("[yellow]No supported files found![/yellow]")
-            return None
-        
-        parsed_results = {}
-        
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            
-            for file_path in files_to_parse[:10]:  # Limit to 10 files for demo
-                task = progress.add_task(f"Parsing {file_path.name}...", total=1)
-                
-                try:
-                    file_type = self.detect_file_type(file_path)
-                    parser = self.get_parser(file_type)
-                    
-                    # Parse the file
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                    
-                    parsed_data = parser.parse(content, str(file_path))
-                    parsed_results[str(file_path)] = {
-                        'type': file_type,
-                        'data': parsed_data,
-                        'size': len(content)
-                    }
-                    
-                except Exception as e:
-                    console.print(f"[red]Error parsing {file_path}: {e}[/red]")
-                
-                progress.update(task, advance=1)
-        
-        self.parsed_data = parsed_results
-        return parsed_results
-    
-    def show_parsing_results(self, parsed_results):
-        """Display parsing results"""
-        if not parsed_results:
-            return
-        
-        console.print("\n[bold green]✅ Parsing Complete![/bold green]")
-        
-        table = Table(
-            title="[bold blue]📊 Parsed Files Summary[/bold blue]",
-            show_header=True,
-            header_style="bold magenta",
-            border_style="green"
-        )
-        
-        table.add_column("File", style="bold white")
-        table.add_column("Type", style="bold cyan")
-        table.add_column("Size", style="bold yellow")
-        table.add_column("Status", style="bold green")
-        
-        for file_path, data in parsed_results.items():
-            file_name = Path(file_path).name
-            table.add_row(
-                file_name,
-                data['type'].upper(),
-                f"{data['size']} chars",
-                "✅ Parsed"
-            )
-        
-        console.print(table)
-    
-    def get_agent(self, agent_type):
-        """Get appropriate agent for the service"""
-        if not AGENTS_AVAILABLE:
-            return FallbackAgent()
-            
-        try:
-            if agent_type == 'test':
-                return TestAgent()
-            elif agent_type == 'refactor':
-                return RefactorAgent()
-            elif agent_type == 'debug':
-                return DebugAgent()
-            elif agent_type == 'output':
-                return OutputAgent()
-            elif agent_type == 'parser':
-                return ParserAgent()
-            elif agent_type == 'planner':
-                return PlannerAgent()
-            else:
-                return BaseAgent()
-        except Exception as e:
-            console.print(f"[yellow]Warning: Using fallback agent - {e}[/yellow]")
-            return FallbackAgent()
+            return str(path)
     
     def execute_service(self, service_key):
-        """Execute the selected service with parsing and agent integration"""
+        """Execute the selected service by routing through Control Agent"""
         service = self.services[service_key]
         service_name = service['name']
-        agent_type = service['agent']
         
         console.print(f"\n[bold blue]🚀 Starting {service_name}[/bold blue]")
         
-        # Step 1: Get file/folder path
-        path = self.get_file_or_folder_path()
-        if not path:
+        # Step 1: Get file/folder path from user
+        target_path = self.get_file_or_folder_path()
+        if not target_path:
             console.print("[yellow]Operation cancelled.[/yellow]")
             return
         
-        # Step 2: Parse files
-        parsed_results = self.parse_files(path)
-        if not parsed_results:
-            console.print("[yellow]No files to process.[/yellow]")
-            return
+        # Step 2: Route everything through Control Agent
+        console.print(f"\n[bold green]🤖 Initializing Control Agent[/bold green]")
         
-        # Step 3: Show parsing results
-        self.show_parsing_results(parsed_results)
-        
-        # Step 4: Initialize and run agent
-        console.print(f"\n[bold green]🤖 Initializing {agent_type.title()} Agent[/bold green]")
-        
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task(f"Running {service_name}...", total=1)
+        try:
+            # Let control agent handle everything: parsing, agent routing, and results
+            result = self.control_agent.process_request(service_key, target_path)
             
-            try:
-                agent = self.get_agent(agent_type)
+            if result['status'] == 'error':
+                console.print(f"[red]❌ Service failed: {result['error']}[/red]")
+            else:
+                console.print(f"[bold green]✅ {service_name} completed successfully![/bold green]")
                 
-                # Pass parsed data to agent
-                result = agent.process(parsed_results, str(path))
-                
-                progress.update(task, advance=1)
-                
-                # Display results
-                self.show_agent_results(service_name, result)
-                
-            except Exception as e:
-                console.print(f"[red]❌ Agent error: {e}[/red]")
-    
-    def show_agent_results(self, service_name, result):
-        """Display agent processing results"""
-        console.print(f"\n[bold green]✅ {service_name} Complete![/bold green]")
-        
-        if isinstance(result, dict):
-            panel_content = ""
-            for key, value in result.items():
-                panel_content += f"[bold cyan]{key}:[/bold cyan] {value}\n"
-        else:
-            panel_content = str(result)
-        
-        console.print(Panel(
-            panel_content,
-            title=f"[bold green]📋 {service_name} Results[/bold green]",
-            border_style="green"
-        ))
+        except Exception as e:
+            console.print(f"[red]❌ Unexpected error: {e}[/red]")
     
     def continue_prompt(self):
         """Ask user if they want to continue"""
@@ -377,10 +176,41 @@ class CLIHandler:
             "[bold yellow]Would you like to use another service?[/bold yellow]",
             default=True
         )
+    
+    def run_interactive_mode(self):
+        """Run the interactive CLI mode"""
+        self.show_banner()
+        
+        while True:
+            try:
+                self.show_main_menu()
+                choice = self.get_user_choice()
+                
+                if choice in ['q', 'quit', 'exit']:
+                    console.print("\n[bold green]👋 Thank you for using Code Assist![/bold green]")
+                    console.print("[dim]Goodbye![/dim]\n")
+                    break
+                
+                # Execute the selected service via Control Agent
+                self.execute_service(choice)
+                
+                # Ask if user wants to continue
+                if not self.continue_prompt():
+                    console.print("\n[bold green]👋 Thank you for using Code Assist![/bold green]")
+                    break
+                    
+            except KeyboardInterrupt:
+                console.print("\n\n[yellow]Operation cancelled by user[/yellow]")
+                console.print("[bold green]👋 Thank you for using Code Assist![/bold green]")
+                break
+            except Exception as e:
+                console.print(f"\n[bold red]❌ Error: {e}[/bold red]")
+                if not self.continue_prompt():
+                    break
 
 
 # Initialize CLI handler
-cli_handler = CLIHandler()
+cli_handler = SimplifiedCLI()
 
 
 @click.group(invoke_without_command=True)
@@ -389,39 +219,7 @@ def cli(ctx):
     """🚀 Code Assist - AI-powered development companion with parser & agent integration"""
     if ctx.invoked_subcommand is None:
         # Interactive mode
-        run_interactive_mode()
-
-
-def run_interactive_mode():
-    """Run the interactive CLI mode"""
-    cli_handler.show_banner()
-    
-    while True:
-        try:
-            cli_handler.show_main_menu()
-            choice = cli_handler.get_user_choice()
-            
-            if choice in ['q', 'quit', 'exit']:
-                console.print("\n[bold green]👋 Thank you for using Code Assist![/bold green]")
-                console.print("[dim]Goodbye![/dim]\n")
-                break
-            
-            # Execute the selected service
-            cli_handler.execute_service(choice)
-            
-            # Ask if user wants to continue
-            if not cli_handler.continue_prompt():
-                console.print("\n[bold green]👋 Thank you for using Code Assist![/bold green]")
-                break
-                
-        except KeyboardInterrupt:
-            console.print("\n\n[yellow]Operation cancelled by user[/yellow]")
-            console.print("[bold green]👋 Thank you for using Code Assist![/bold green]")
-            break
-        except Exception as e:
-            console.print(f"\n[bold red]❌ Error: {e}[/bold red]")
-            if not cli_handler.continue_prompt():
-                break
+        cli_handler.run_interactive_mode()
 
 
 # Individual command functions (can be called directly with path)
@@ -430,8 +228,11 @@ def run_interactive_mode():
 def test(path):
     """🧪 Run testing services on specified path"""
     if path:
-        cli_handler.current_path = Path(path)
-        cli_handler.execute_service('1')
+        result = cli_handler.control_agent.process_request('test', str(Path(path).resolve()))
+        if result['status'] == 'error':
+            console.print(f"[red]❌ Testing failed: {result['error']}[/red]")
+        else:
+            console.print(f"[green]✅ Testing completed for {path}[/green]")
     else:
         cli_handler.execute_service('1')
 
@@ -441,8 +242,11 @@ def test(path):
 def refactor(path):
     """🔧 Run refactoring services on specified path"""
     if path:
-        cli_handler.current_path = Path(path)
-        cli_handler.execute_service('2')
+        result = cli_handler.control_agent.process_request('refactor', str(Path(path).resolve()))
+        if result['status'] == 'error':
+            console.print(f"[red]❌ Refactoring failed: {result['error']}[/red]")
+        else:
+            console.print(f"[green]✅ Refactoring completed for {path}[/green]")
     else:
         cli_handler.execute_service('2')
 
@@ -452,8 +256,11 @@ def refactor(path):
 def debug(path):
     """🐛 Run debugging services on specified path"""
     if path:
-        cli_handler.current_path = Path(path)
-        cli_handler.execute_service('3')
+        result = cli_handler.control_agent.process_request('debug', str(Path(path).resolve()))
+        if result['status'] == 'error':
+            console.print(f"[red]❌ Debugging failed: {result['error']}[/red]")
+        else:
+            console.print(f"[green]✅ Debugging completed for {path}[/green]")
     else:
         cli_handler.execute_service('3')
 
@@ -463,8 +270,11 @@ def debug(path):
 def documentation(path):
     """📚 Generate documentation for specified path"""
     if path:
-        cli_handler.current_path = Path(path)
-        cli_handler.execute_service('4')
+        result = cli_handler.control_agent.process_request('docs', str(Path(path).resolve()))
+        if result['status'] == 'error':
+            console.print(f"[red]❌ Documentation failed: {result['error']}[/red]")
+        else:
+            console.print(f"[green]✅ Documentation completed for {path}[/green]")
     else:
         cli_handler.execute_service('4')
 
@@ -474,8 +284,11 @@ def documentation(path):
 def analyze(path):
     """🔍 Analyze code structure for specified path"""
     if path:
-        cli_handler.current_path = Path(path)
-        cli_handler.execute_service('5')
+        result = cli_handler.control_agent.process_request('analyze', str(Path(path).resolve()))
+        if result['status'] == 'error':
+            console.print(f"[red]❌ Analysis failed: {result['error']}[/red]")
+        else:
+            console.print(f"[green]✅ Analysis completed for {path}[/green]")
     else:
         cli_handler.execute_service('5')
 
@@ -485,8 +298,11 @@ def analyze(path):
 def plan(path):
     """📋 Plan development tasks for specified path"""
     if path:
-        cli_handler.current_path = Path(path)
-        cli_handler.execute_service('6')
+        result = cli_handler.control_agent.process_request('plan', str(Path(path).resolve()))
+        if result['status'] == 'error':
+            console.print(f"[red]❌ Planning failed: {result['error']}[/red]")
+        else:
+            console.print(f"[green]✅ Planning completed for {path}[/green]")
     else:
         cli_handler.execute_service('6')
 
@@ -494,7 +310,7 @@ def plan(path):
 @cli.command(name="interactive")
 def interactive_mode():
     """🎯 Run interactive mode"""
-    run_interactive_mode()
+    cli_handler.run_interactive_mode()
 
 
 if __name__ == "__main__":

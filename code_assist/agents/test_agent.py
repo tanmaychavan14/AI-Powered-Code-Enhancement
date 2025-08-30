@@ -5,7 +5,10 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from rich.console import Console
 import google.generativeai as genai
-
+# Missing imports at top of test_agent.py
+from .runners.pytest_runner import PytestRunner
+from .runners.jest_runner import JestRunner  
+from .runners.junit_runner import JunitRunner
 console = Console()
 
 class TestAgent:
