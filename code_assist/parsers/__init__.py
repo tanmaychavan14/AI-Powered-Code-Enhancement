@@ -9,7 +9,9 @@ __description__ = "File parsers for Code Assist AI development companion"
 try:
     from .base_parser import BaseParser
     from .python_parser import PythonParser
+    from .javascript_parser import JavaScriptParser
+    from .java_parser import JavaParser
     
-    __all__ = ['BaseParser', 'PythonParser']
+    __all__ = ['BaseParser', 'PythonParser', 'JavaScriptParser', 'JavaParser']
 except ImportError:
     __all__ = []

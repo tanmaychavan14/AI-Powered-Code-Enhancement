@@ -5,6 +5,7 @@ Routes user requests to appropriate agents and coordinates processing
 """
 
 import os
+import json
 import sys
 import importlib.util
 from pathlib import Path
@@ -428,7 +429,8 @@ class ControlAgent:
             except Exception as e:
                 console.print(f"[red]  ❌ {file_path.name} - {str(e)}[/red]")
                 continue
-        
+        console.print(f"[magenta]DEBUG - Parsed data keys: {list(parsed_data.keys())}[/magenta]")
+        print(json.dumps(parsed_data, indent=2)[:1000])  # First 1000 chars
         console.print(f"[bold green]✅ Parsing Complete![/bold green]")
         console.print(f"[green]📊 Successfully parsed {len(parsed_data)} files[/green]")
         return parsed_data

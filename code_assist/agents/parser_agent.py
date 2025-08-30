@@ -8,7 +8,9 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional, List  # Added List import here
 from rich.console import Console
-
+from parsers.python_parser import PythonParser
+from parsers.javascript_parser import JavaScriptParser
+from parsers.java_parser import JavaParser
 console = Console()
 
 class ParserAgent:
@@ -30,21 +32,21 @@ class ParserAgent:
     def _initialize_parsers(self):
         """Initialize language-specific parsers with fallback"""
         try:
-            from parsers.python_parser import PythonParser
+           
             self.parsers['python'] = PythonParser()
         except ImportError:
             console.print("[yellow]Python parser not available, using fallback[/yellow]")
             self.parsers['python'] = self._create_fallback_parser('python')
         
         try:
-            from parsers.javascript_parser import JavaScriptParser
+            
             self.parsers['javascript'] = JavaScriptParser()
         except ImportError:
             console.print("[yellow]JavaScript parser not available, using fallback[/yellow]")
             self.parsers['javascript'] = self._create_fallback_parser('javascript')
         
         try:
-            from parsers.java_parser import JavaParser
+            
             self.parsers['java'] = JavaParser()
         except ImportError:
             console.print("[yellow]Java parser not available, using fallback[/yellow]")
