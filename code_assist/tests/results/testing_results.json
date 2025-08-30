@@ -3,9 +3,9 @@
   "project_path": "E:\\Python\\python project\\imgSteg.py",
   "files_analyzed": 1,
   "files_processed": 1,
-  "tests_generated": 6,
-  "tests_passed": 4,
-  "tests_failed": 2,
+  "tests_generated": 4,
+  "tests_passed": 3,
+  "tests_failed": 1,
   "test_files": [
     "tests\\generated\\python\\test_imgSteg.py"
   ],

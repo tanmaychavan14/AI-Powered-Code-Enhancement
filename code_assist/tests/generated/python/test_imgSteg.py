@@ -8,32 +8,22 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from imgSteg import *
 
 
-def test_genData():
-    """Test genData function"""
+def test_add():
+    """Test add function"""
     # TODO: Add proper test implementation
     assert True
 
-def test_modPix():
-    """Test modPix function"""
+def test_subtract():
+    """Test subtract function"""
     # TODO: Add proper test implementation
     assert True
 
-def test_encode_enc():
-    """Test encode_enc function"""
+def test_multiply():
+    """Test multiply function"""
     # TODO: Add proper test implementation
     assert True
 
-def test_encode():
-    """Test encode function"""
-    # TODO: Add proper test implementation
-    assert True
-
-def test_decode():
-    """Test decode function"""
-    # TODO: Add proper test implementation
-    assert True
-
-def test_main():
-    """Test main function"""
+def test_divide():
+    """Test divide function"""
     # TODO: Add proper test implementation
     assert True
