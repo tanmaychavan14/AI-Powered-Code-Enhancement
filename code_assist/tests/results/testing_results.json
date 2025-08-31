@@ -4,8 +4,8 @@
   "files_analyzed": 1,
   "files_processed": 1,
   "tests_generated": 4,
-  "tests_passed": 11,
-  "tests_failed": 3,
+  "tests_passed": 17,
+  "tests_failed": 0,
   "test_files": [
     "tests\\generated\\python\\test_imgSteg.py"
   ],

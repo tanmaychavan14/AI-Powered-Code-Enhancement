@@ -7,7 +7,9 @@ import inspect
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from rich.console import Console
-import google.generativeai as genai
+
+# Import the GeminiClient from utils
+from utils.gemini_client import GeminiClient
 
 # Missing imports at top of test_agent.py
 from .runners.pytest_runner import PytestRunner
@@ -21,7 +23,8 @@ class TestAgent:
     
     def __init__(self):
         self.console = Console()
-        self.gemini_client = self._initialize_gemini()
+        self.gemini_client = self._initialize_llm()
+        self.llm_available = self.gemini_client is not None
         self.test_runners = {
             'python': PytestRunner(),
             'javascript': JestRunner(),
@@ -34,22 +37,31 @@ class TestAgent:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.results_dir.mkdir(parents=True, exist_ok=True)
     
-    def _initialize_gemini(self):
-        """Initialize Gemini AI client"""
+    def _initialize_llm(self) -> Optional[GeminiClient]:
+        """Initialize LLM client with proper error handling"""
         try:
-            # Get API key from environment variable
-            api_key = os.getenv('GEMINI_API_KEY')
-            if not api_key:
-                console.print("[yellow]Warning: GEMINI_API_KEY not found in environment[/yellow]")
+            gemini_client = GeminiClient()
+            
+            # Test if the client is properly initialized
+            if gemini_client.model is None:
+                console.print("[red]❌ LLM initialization failed - API key or connection issue[/red]")
                 return None
             
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-2.5-pro')
-            console.print("[green]✅ Gemini AI initialized[/green]")
-            return model
+            # Test with a simple prompt to verify it's working
+            test_response = gemini_client.generate_content("Hello")
+            if test_response is None:
+                console.print("[red]❌ LLM test failed - server may be down[/red]")
+                return None
             
+            console.print("[green]✅ LLM (Gemini) successfully initialized and tested[/green]")
+            return gemini_client
+            
+        except ImportError as e:
+            console.print(f"[red]❌ Failed to import GeminiClient: {e}[/red]")
+            console.print("[yellow]Make sure utils/gemini_client.py exists and is properly configured[/yellow]")
+            return None
         except Exception as e:
-            console.print(f"[red]❌ Failed to initialize Gemini: {e}[/red]")
+            console.print(f"[red]❌ LLM initialization error: {e}[/red]")
             return None
     
     def _analyze_code_structure(self, content: str, language: str) -> Dict[str, Any]:
@@ -154,6 +166,17 @@ class TestAgent:
         try:
             console.print("[bold cyan]🧪 Starting test generation...[/bold cyan]")
             
+            # Check LLM availability first
+            if not self.llm_available:
+                console.print("[red]❌ LLM is not available. Cannot generate meaningful tests.[/red]")
+                console.print("[yellow]Please check your GEMINI_API_KEY in .env file or network connection[/yellow]")
+                return {
+                    'error': 'LLM unavailable - cannot generate quality tests',
+                    'files_processed': 0,
+                    'tests_generated': 0,
+                    'llm_status': 'unavailable'
+                }
+            
             results = {
                 'files_processed': 0,
                 'tests_generated': 0,
@@ -161,7 +184,8 @@ class TestAgent:
                 'tests_failed': 0,
                 'test_files': [],
                 'execution_results': {},
-                'errors': []
+                'errors': [],
+                'llm_status': 'available'
             }
             
             for file_path, file_data in parsed_data.items():
@@ -232,17 +256,22 @@ class TestAgent:
                     'error': 'No testable components found'
                 }
             
-            # Always try LLM first, with better validation
+            # Check LLM availability before attempting generation
+            if not self.llm_available:
+                console.print("[red]❌ LLM unavailable - cannot generate quality tests[/red]")
+                return {
+                    'success': False,
+                    'error': 'LLM service unavailable - refusing to generate low-quality fallback tests'
+                }
+            
+            # Try LLM generation with enhanced validation
             test_code = self._generate_test_code_with_enhanced_llm(file_data, test_targets)
             
             if not test_code:
-                console.print("[yellow]⚠️ LLM failed, using intelligent fallback[/yellow]")
-                test_code = self._generate_intelligent_fallback_test(file_data, test_targets)
-            
-            if not test_code:
+                console.print("[red]❌ LLM failed to generate valid tests[/red]")
                 return {
                     'success': False,
-                    'error': 'Failed to generate any test code'
+                    'error': 'LLM failed to generate meaningful test cases'
                 }
             
             # Save test file
@@ -261,10 +290,10 @@ class TestAgent:
             }
     
     def _generate_test_code_with_enhanced_llm(self, file_data: Dict[str, Any], test_targets: Dict[str, Any]) -> Optional[str]:
-        """Generate test code using Gemini LLM with enhanced analysis"""
+        """Generate test code using LLM with enhanced analysis and validation"""
         try:
-            if not self.gemini_client:
-                console.print("[yellow]No Gemini client available[/yellow]")
+            if not self.llm_available:
+                console.print("[yellow]LLM not available for test generation[/yellow]")
                 return None
             
             language = file_data['language']
@@ -277,13 +306,19 @@ class TestAgent:
             
             console.print(f"[dim]Sending {len(prompt)} chars to LLM[/dim]")
             
-            # Generate test code with more specific instructions
-            response = self.gemini_client.generate_content(prompt)
+            # Generate test code with error handling
+            try:
+                response = self.gemini_client.generate_content(prompt)
+            except Exception as llm_error:
+                console.print(f"[red]❌ LLM service error: {llm_error}[/red]")
+                console.print("[yellow]This could be due to: API limits, network issues, or server downtime[/yellow]")
+                return None
+            
             console.print(f"[cyan]LLM Response received: {response is not None}[/cyan]")
-            if response:
-             console.print(f"[cyan]Response text length: {len(response.text) if response.text else 0}[/cyan]")
-             console.print(f"[cyan]Response preview: {response.text[:200] if response.text else 'None'}...[/cyan]")
-            if response and response.text:
+            
+            if response and hasattr(response, 'text') and response.text:
+                console.print(f"[cyan]Response text length: {len(response.text)}[/cyan]")
+                console.print(f"[cyan]Response preview: {response.text[:200]}...[/cyan]")
                 console.print(f"[green]✅ LLM responded with {len(response.text)} chars[/green]")
                 
                 # Clean and validate generated code
@@ -297,64 +332,20 @@ class TestAgent:
                     console.print("[yellow]⚠️ LLM generated invalid/placeholder tests[/yellow]")
                     # Try one more time with stricter prompt
                     return self._retry_with_stricter_prompt(file_data, test_targets)
-            
-            console.print("[red]❌ LLM returned empty response[/red]")
-            return None
+            else:
+                console.print("[red]❌ LLM returned empty or invalid response[/red]")
+                return None
             
         except Exception as e:
             console.print(f"[red]❌ LLM generation failed: {e}[/red]")
             return None
 
-    def _validate_generated_tests(self, test_code: str, language: str) -> bool:
-        """Validate that generated tests are meaningful, not placeholders"""
-        if not test_code or len(test_code.strip()) < 50:
-            return False
-        
-        # Check for placeholder patterns
-        bad_patterns = [
-            'assert True',
-            'TODO',
-            'pass  # placeholder',
-            'NotImplemented',
-            'raise NotImplementedError'
-        ]
-        
-        for pattern in bad_patterns:
-            if pattern in test_code:
-                console.print(f"[yellow]Found placeholder pattern: {pattern}[/yellow]")
-                return False
-        
-        if language == 'python':
-            # Check for actual test patterns
-            good_patterns = [
-                'assert ',
-                'assertEqual',
-                'assertRaises',
-                'pytest.raises'
-            ]
-            
-            has_good_pattern = any(pattern in test_code for pattern in good_patterns)
-            if not has_good_pattern:
-                console.print("[yellow]No valid test assertions found[/yellow]")
-                return False
-        
-        # Check if it has actual function calls or meaningful logic
-        lines_with_logic = 0
-        for line in test_code.split('\n'):
-            line = line.strip()
-            if line and not line.startswith('#') and not line.startswith('def ') and not line.startswith('"""'):
-                if any(pattern in line for pattern in ['(', '=', 'assert', 'expect', 'should']):
-                    lines_with_logic += 1
-        
-        if lines_with_logic < 5:  # Should have at least 5 lines of actual test logic
-            console.print(f"[yellow]Not enough test logic: {lines_with_logic} lines[/yellow]")
-            return False
-        
-        return True
-    
     def _retry_with_stricter_prompt(self, file_data: Dict[str, Any], test_targets: Dict[str, Any]) -> Optional[str]:
         """Retry with even stricter, more explicit prompt"""
         try:
+            if not self.llm_available:
+                return None
+                
             content = file_data['content']
             language = file_data['language']
             
@@ -405,20 +396,75 @@ Generate EXACTLY this style - real function calls, real expected values:
 """
             
             console.print("[dim]🔄 Retrying with stricter prompt...[/dim]")
-            response = self.gemini_client.generate_content(strict_prompt)
             
-            if response and response.text:
+            try:
+                response = self.gemini_client.generate_content(strict_prompt)
+            except Exception as llm_error:
+                console.print(f"[red]❌ LLM retry failed: {llm_error}[/red]")
+                return None
+            
+            if response and hasattr(response, 'text') and response.text:
                 test_code = self._clean_generated_code(response.text, language)
                 if self._validate_generated_tests(test_code, language):
                     console.print("[green]✅ Strict retry successful[/green]")
                     return test_code
             
-            console.print("[red]❌ Strict retry also failed[/red]")
+            console.print("[red]❌ Strict retry also failed to generate valid tests[/red]")
             return None
             
         except Exception as e:
             console.print(f"[red]Strict retry error: {e}[/red]")
             return None
+
+    def _validate_generated_tests(self, test_code: str, language: str) -> bool:
+        """Validate that generated tests are meaningful, not placeholders"""
+        if not test_code or len(test_code.strip()) < 50:
+            return False
+        
+        # Check for placeholder patterns
+        bad_patterns = [
+            'assert True',
+            'TODO',
+            'pass  # placeholder',
+            'NotImplemented',
+            'raise NotImplementedError',
+            '# Add your test here',
+            '# TODO: implement',
+            'assert False, "Not implemented"'
+        ]
+        
+        for pattern in bad_patterns:
+            if pattern in test_code:
+                console.print(f"[yellow]Found placeholder pattern: {pattern}[/yellow]")
+                return False
+        
+        if language == 'python':
+            # Check for actual test patterns
+            good_patterns = [
+                'assert ',
+                'assertEqual',
+                'assertRaises',
+                'pytest.raises'
+            ]
+            
+            has_good_pattern = any(pattern in test_code for pattern in good_patterns)
+            if not has_good_pattern:
+                console.print("[yellow]No valid test assertions found[/yellow]")
+                return False
+        
+        # Check if it has actual function calls or meaningful logic
+        lines_with_logic = 0
+        for line in test_code.split('\n'):
+            line = line.strip()
+            if line and not line.startswith('#') and not line.startswith('def ') and not line.startswith('"""'):
+                if any(pattern in line for pattern in ['(', '=', 'assert', 'expect', 'should']):
+                    lines_with_logic += 1
+        
+        if lines_with_logic < 5:  # Should have at least 5 lines of actual test logic
+            console.print(f"[yellow]Not enough test logic: {lines_with_logic} lines[/yellow]")
+            return False
+        
+        return True
     
     def _create_enhanced_test_generation_prompt(self, language: str, content: str, test_targets: Dict[str, Any]) -> str:
         """Create enhanced prompt with better context"""
@@ -463,195 +509,10 @@ IMPORTANT: Look at the actual function implementations to understand:
 - What errors they might raise
 
 Generate complete pytest code with proper imports and realistic test data.
+Only return the Python test code, no explanations.
 """
         
         return f"Generate comprehensive {language} test cases for the provided code."
-    
-    def _generate_intelligent_fallback_test(self, file_data: Dict[str, Any], test_targets: Dict[str, Any]) -> str:
-        """Generate intelligent fallback tests based on function analysis"""
-        language = file_data['language']
-        
-        if language == 'python':
-            return self._generate_python_intelligent_fallback(file_data, test_targets)
-        elif language == 'javascript':
-            return self._generate_javascript_fallback_test(file_data, test_targets)
-        elif language == 'java':
-            return self._generate_java_fallback_test(file_data, test_targets)
-        
-        return ""
-    
-    def _generate_python_intelligent_fallback(self, file_data: Dict[str, Any], test_targets: Dict[str, Any]) -> str:
-        """Generate intelligent Python tests based on function analysis"""
-        file_name = Path(file_data['file_path']).stem
-        
-        test_code = f"""import pytest
-import sys
-from pathlib import Path
-
-# Add the source directory to Python path  
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-try:
-    from {file_name} import *
-except ImportError as e:
-    print(f"Import error: {{e}}")
-    # Try alternative import methods
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("{file_name}", Path(__file__).parent.parent / "{file_name}.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    globals().update({{name: getattr(module, name) for name in dir(module) if not name.startswith('_')}})
-
-"""
-        
-        # Generate smart tests based on function analysis
-        for func in test_targets['functions']:
-            func_name = func['name']
-            args = func.get('args', [])
-            operations = func.get('operations', [])
-            
-            test_code += f"""
-# Tests for {func_name} function
-def test_{func_name}_exists():
-    \"\"\"Test that {func_name} function exists\"\"\"
-    assert callable({func_name}), f"{func_name} should be callable"
-
-"""
-            
-            # Generate tests based on detected operations
-            if 'addition' in operations or 'add' in func_name.lower():
-                test_code += f"""def test_{func_name}_addition():
-    \"\"\"Test {func_name} performs addition correctly\"\"\"
-    if len(inspect.signature({func_name}).parameters) >= 2:
-        result = {func_name}(5, 3)
-        assert isinstance(result, (int, float)), "Should return a number"
-        assert result == 8, "5 + 3 should equal 8"
-    else:
-        # Single parameter function
-        result = {func_name}(5)
-        assert result is not None
-
-def test_{func_name}_negative_numbers():
-    \"\"\"Test {func_name} with negative numbers\"\"\"
-    if len(inspect.signature({func_name}).parameters) >= 2:
-        result = {func_name}(-2, -3)
-        assert isinstance(result, (int, float))
-        assert result == -5, "-2 + -3 should equal -5"
-
-def test_{func_name}_zero():
-    \"\"\"Test {func_name} with zero\"\"\"
-    if len(inspect.signature({func_name}).parameters) >= 2:
-        result = {func_name}(0, 5)
-        assert result == 5, "0 + 5 should equal 5"
-
-"""
-            elif 'subtraction' in operations or 'subtract' in func_name.lower():
-                test_code += f"""def test_{func_name}_subtraction():
-    \"\"\"Test {func_name} performs subtraction correctly\"\"\"
-    if len(inspect.signature({func_name}).parameters) >= 2:
-        result = {func_name}(10, 3)
-        assert isinstance(result, (int, float))
-        assert result == 7, "10 - 3 should equal 7"
-
-def test_{func_name}_negative_result():
-    \"\"\"Test {func_name} with negative result\"\"\"
-    if len(inspect.signature({func_name}).parameters) >= 2:
-        result = {func_name}(3, 10)
-        assert result == -7, "3 - 10 should equal -7"
-
-"""
-            elif 'multiplication' in operations or 'multiply' in func_name.lower():
-                test_code += f"""def test_{func_name}_multiplication():
-    \"\"\"Test {func_name} performs multiplication correctly\"\"\"
-    if len(inspect.signature({func_name}).parameters) >= 2:
-        result = {func_name}(4, 3)
-        assert isinstance(result, (int, float))
-        assert result == 12, "4 * 3 should equal 12"
-
-def test_{func_name}_by_zero():
-    \"\"\"Test {func_name} multiplication by zero\"\"\"
-    if len(inspect.signature({func_name}).parameters) >= 2:
-        result = {func_name}(5, 0)
-        assert result == 0, "5 * 0 should equal 0"
-
-"""
-            elif 'division' in operations or 'divide' in func_name.lower():
-                test_code += f"""def test_{func_name}_division():
-    \"\"\"Test {func_name} performs division correctly\"\"\"
-    if len(inspect.signature({func_name}).parameters) >= 2:
-        result = {func_name}(10, 2)
-        assert isinstance(result, (int, float))
-        assert result == 5, "10 / 2 should equal 5"
-
-def test_{func_name}_division_by_zero():
-    \"\"\"Test {func_name} handles division by zero\"\"\"
-    if len(inspect.signature({func_name}).parameters) >= 2:
-        with pytest.raises(ZeroDivisionError):
-            {func_name}(10, 0)
-
-def test_{func_name}_float_division():
-    \"\"\"Test {func_name} with float division\"\"\"
-    if len(inspect.signature({func_name}).parameters) >= 2:
-        result = {func_name}(7, 2)
-        assert result == 3.5, "7 / 2 should equal 3.5"
-
-"""
-            else:
-                # Generic but intelligent tests
-                test_code += f"""def test_{func_name}_with_valid_args():
-    \"\"\"Test {func_name} with valid arguments\"\"\"
-    import inspect
-    sig = inspect.signature({func_name})
-    param_count = len(sig.parameters)
-    
-    if param_count == 0:
-        result = {func_name}()
-        assert result is not None or result is None  # Allow any return value
-    elif param_count == 1:
-        # Try different types of single arguments
-        for test_val in [1, "test", [1, 2, 3]]:
-            try:
-                result = {func_name}(test_val)
-                assert result is not None or result is None
-                break
-            except (TypeError, ValueError):
-                continue
-    elif param_count == 2:
-        # Try pairs of arguments
-        test_pairs = [(1, 2), ("a", "b"), ([1], [2])]
-        for arg1, arg2 in test_pairs:
-            try:
-                result = {func_name}(arg1, arg2)
-                assert result is not None or result is None
-                break
-            except (TypeError, ValueError):
-                continue
-
-def test_{func_name}_error_handling():
-    \"\"\"Test {func_name} handles invalid input appropriately\"\"\"
-    import inspect
-    sig = inspect.signature({func_name})
-    param_count = len(sig.parameters)
-    
-    if param_count > 0:
-        # Test with None values
-        try:
-            if param_count == 1:
-                {func_name}(None)
-            elif param_count == 2:
-                {func_name}(None, None)
-            else:
-                {func_name}(*[None] * param_count)
-        except (TypeError, ValueError, AttributeError) as e:
-            # Expected behavior - function should handle invalid input
-            assert True, f"Function properly raised {{type(e).__name__}}"
-
-"""
-        
-        # Add inspect import at the top
-        test_code = test_code.replace("import pytest", "import pytest\nimport inspect")
-        
-        return test_code
     
     def _clean_generated_code(self, generated_text: str, language: str) -> str:
         """Clean and extract code from LLM response"""
@@ -682,96 +543,6 @@ def test_{func_name}_error_handling():
         
         # Return as-is if no code blocks found
         return generated_text.strip()
-    
-    def _generate_javascript_fallback_test(self, file_data: Dict[str, Any], test_targets: Dict[str, Any]) -> str:
-        """Generate basic JavaScript Jest template"""
-        file_name = Path(file_data['file_path']).stem
-        
-        test_code = f"""const {{ }} = require('../{file_name}');
-
-describe('{file_name}', () => {{
-"""
-        
-        # Generate tests for functions
-        for func in test_targets['functions']:
-            test_code += f"""
-    describe('{func['name']}', () => {{
-        test('should exist and be callable', () => {{
-            expect(typeof {func['name']}).toBe('function');
-        }});
-        
-        test('should handle valid input', () => {{
-            expect(() => {{
-                {func['name']}('test');
-            }}).not.toThrow();
-        }});
-        
-        test('should handle invalid input', () => {{
-            expect(() => {{
-                {func['name']}(null);
-            }}).toThrow();
-        }});
-        
-        test('should return consistent type', () => {{
-            const result = {func['name']}('test');
-            expect(result).toBeDefined();
-        }});
-        
-        test('should handle edge cases', () => {{
-            expect(() => {{
-                {func['name']}('');
-            }}).not.toThrow();
-        }});
-    }});
-"""
-        
-        test_code += "});"
-        return test_code
-    
-    def _generate_java_fallback_test(self, file_data: Dict[str, Any], test_targets: Dict[str, Any]) -> str:
-        """Generate basic Java JUnit template"""
-        file_name = Path(file_data['file_path']).stem
-        
-        test_code = f"""import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import static org.junit.jupiter.api.Assertions.*;
-
-@DisplayName("{file_name} Test Suite")
-public class {file_name}Test {{
-    
-    @BeforeEach
-    void setUp() {{
-        // Setup test fixtures
-    }}
-"""
-        
-        # Generate tests for each class/method
-        for cls in test_targets['classes']:
-            test_code += f"""
-    @Test
-    @DisplayName("Test {cls['name']} creation")
-    void test{cls['name']}Creation() {{
-        assertDoesNotThrow(() -> {{
-            {cls['name']} instance = new {cls['name']}();
-            assertNotNull(instance);
-        }});
-    }}
-"""
-        
-        for func in test_targets['functions']:
-            test_code += f"""
-    @Test
-    @DisplayName("Test {func['name']} function")
-    void test{func['name']}() {{
-        assertDoesNotThrow(() -> {{
-            {func['name']}("test");
-        }});
-    }}
-"""
-        
-        test_code += "}"
-        return test_code
     
     def _save_test_file(self, test_code: str, original_file_path: str, language: str) -> Path:
         """Save generated test code to appropriate file"""
@@ -814,4 +585,35 @@ public class {file_name}Test {{
             return {
                 'success': False,
                 'error': f'Test execution failed: {str(e)}'
+            }
+    
+    def check_llm_status(self) -> Dict[str, Any]:
+        """Check current LLM availability status"""
+        if not self.llm_available:
+            return {
+                'available': False,
+                'status': 'LLM client not initialized',
+                'can_generate_tests': False
+            }
+        
+        # Test with a simple prompt
+        try:
+            test_response = self.gemini_client.generate_content("ping")
+            if test_response and hasattr(test_response, 'text'):
+                return {
+                    'available': True,
+                    'status': 'LLM service operational',
+                    'can_generate_tests': True
+                }
+            else:
+                return {
+                    'available': False,
+                    'status': 'LLM service not responding',
+                    'can_generate_tests': False
+                }
+        except Exception as e:
+            return {
+                'available': False,
+                'status': f'LLM service error: {str(e)}',
+                'can_generate_tests': False
             }
