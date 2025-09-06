@@ -4,12 +4,13 @@ Enhanced JUnit Runner - Executes Java tests using JUnit with multiple fallback s
 """
 
 import subprocess
-import xml.etree.ElementTree as ET
+import json
 import re
 import os
-import tempfile
+import shutil
+import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from rich.console import Console
 
 console = Console()
@@ -20,21 +21,20 @@ class JunitRunner:
     def __init__(self):
         self.console = Console()
         self.java_available = self._check_java_available()
+        self.javac_available = self._check_javac_available()
         self.maven_available = self._check_maven_available()
         self.gradle_available = self._check_gradle_available()
-        self.junit_jar = self._find_junit_jar()
         
         # Multiple execution strategies
         self.execution_strategies = [
+            self._run_with_junit_direct,
             self._run_with_maven,
             self._run_with_gradle,
-            self._run_with_junit_direct,
-            self._run_with_java_compilation,
-            self._run_basic_syntax_check
+            self._run_basic_compilation_check
         ]
     
     def run_tests(self, test_file_path: str) -> Dict[str, Any]:
-        """Execute tests using the best available method"""
+        """Execute Java tests using the best available method"""
         console.print(f"[cyan]🧪 Running Java tests: {Path(test_file_path).name}[/cyan]")
         
         # Try each execution strategy in order
@@ -60,289 +60,367 @@ class JunitRunner:
             'strategies_attempted': len(self.execution_strategies),
             'java_available': self.java_available,
             'maven_available': self.maven_available,
-            'gradle_available': self.gradle_available,
-            'junit_jar': self.junit_jar is not None
+            'gradle_available': self.gradle_available
         }
     
     def _check_java_available(self) -> bool:
-        """Check if Java is installed"""
+        """Check if Java is installed and available"""
         try:
             result = subprocess.run(['java', '-version'], 
                                   capture_output=True, text=True, timeout=5)
             available = result.returncode == 0
             if available:
-                version_line = result.stdout.split('\n')[0]
-                console.print(f"[green]✅ Gradle available: {version_line}[/green]")
+                version_line = result.stderr.split('\n')[0] if result.stderr else result.stdout.split('\n')[0]
+                console.print(f"[green]✅ Java available: {version_line}[/green]")
             else:
-                console.print("[yellow]⚠️ Gradle not available[/yellow]")
+                console.print("[yellow]⚠️ Java not available[/yellow]")
             return available
         except Exception as e:
-            console.print(f"[yellow]⚠️ Could not check Gradle: {e}[/yellow]")
+            console.print(f"[yellow]⚠️ Could not check Java: {e}[/yellow]")
             return False
     
-    def _find_junit_jar(self) -> str:
-        """Try to find JUnit JAR file"""
-        possible_locations = [
-            'junit-platform-console-standalone.jar',
-            'lib/junit-platform-console-standalone.jar',
-            'target/dependency/junit-platform-console-standalone.jar',
-            '~/.m2/repository/org/junit/platform/junit-platform-console-standalone/1.9.3/junit-platform-console-standalone-1.9.3.jar',
-            '/usr/share/java/junit4.jar',
-            '/usr/share/java/junit.jar'
-        ]
+    def _check_javac_available(self) -> bool:
+        """Check if Java compiler is available"""
+        try:
+            result = subprocess.run(['javac', '-version'], 
+                                  capture_output=True, text=True, timeout=5)
+            available = result.returncode == 0
+            if available:
+                console.print("[green]✅ Java compiler available[/green]")
+            return available
+        except:
+            console.print("[yellow]⚠️ Java compiler not available[/yellow]")
+            return False
+    
+    def _check_maven_available(self) -> bool:
+        """Check if Maven is available"""
+        try:
+            result = subprocess.run(['mvn', '--version'], 
+                                  capture_output=True, text=True, timeout=10)
+            available = result.returncode == 0
+            if available:
+                console.print("[green]✅ Maven available[/green]")
+            return available
+        except Exception:
+            console.print("[yellow]⚠️ Maven not available[/yellow]")
+            return False
+    
+    def _check_gradle_available(self) -> bool:
+        """Check if Gradle is available"""
+        try:
+            result = subprocess.run(['gradle', '--version'], 
+                                  capture_output=True, text=True, timeout=10)
+            available = result.returncode == 0
+            if available:
+                console.print("[green]✅ Gradle available[/green]")
+            return available
+        except Exception:
+            console.print("[yellow]⚠️ Gradle not available[/yellow]")
+            return False
+    
+    def _run_with_junit_direct(self, test_file_path: str) -> Dict[str, Any]:
+        """Strategy 1: Direct JUnit execution with downloaded JARs"""
+        if not self.java_available or not self.javac_available:
+            return {'success': False, 'error': 'Java/javac not available for direct JUnit'}
         
-        for location in possible_locations:
-            expanded_path = os.path.expanduser(location)
-            if os.path.exists(expanded_path):
-                console.print(f"[green]✅ Found JUnit JAR: {expanded_path}[/green]")
-                return expanded_path
-        
-        console.print("[yellow]⚠️ JUnit JAR not found in common locations[/yellow]")
-        return None
+        try:
+            console.print("[dim]Attempting direct JUnit execution...[/dim]")
+            
+            test_dir = Path(test_file_path).parent
+            junit_dir = test_dir / "junit-jars"
+            
+            # Download JUnit jars if needed
+            if not self._ensure_junit_jars(junit_dir):
+                return {'success': False, 'error': 'Could not download JUnit jars'}
+            
+            # Get JUnit jar paths
+            junit_jars = list(junit_dir.glob("*.jar"))
+            if not junit_jars:
+                return {'success': False, 'error': 'JUnit jars not found'}
+            
+            # Compile the test
+            compilation_result = self._compile_java_test(test_file_path, junit_jars)
+            if not compilation_result['success']:
+                return compilation_result
+            
+            # Run the test
+            execution_result = self._execute_junit_test(test_file_path, junit_jars)
+            return execution_result
+            
+        except Exception as e:
+            return {'success': False, 'error': f'Direct JUnit execution failed: {str(e)}'}
     
     def _run_with_maven(self, test_file_path: str) -> Dict[str, Any]:
-        """Strategy 1: Run with Maven (preferred method)"""
+        """Strategy 2: Run with Maven"""
         if not self.maven_available:
             return {'success': False, 'error': 'Maven not available'}
         
         try:
-            # Ensure we're in a Maven project or create minimal structure
-            self._ensure_maven_structure(test_file_path)
+            # Check for pom.xml or create minimal one
+            test_dir = Path(test_file_path).parent
+            pom_path = self._find_or_create_pom(test_dir, test_file_path)
             
-            # Extract test class name
-            test_class = Path(test_file_path).stem
+            if not pom_path:
+                return {'success': False, 'error': 'Could not create Maven project structure'}
             
-            # Try different Maven commands
-            maven_commands = [
-                ['mvn', 'test', f'-Dtest={test_class}', '-q'],
-                ['mvn', 'test', f'-Dtest={test_class}'],
-                ['mvn', 'surefire:test', f'-Dtest={test_class}'],
-                ['mvn', 'compile', 'test-compile', 'surefire:test', f'-Dtest={test_class}']
-            ]
+            # Ensure proper Maven directory structure
+            self._setup_maven_structure(pom_path.parent, test_file_path)
             
-            for cmd in maven_commands:
-                try:
-                    console.print(f"[dim]Running: {' '.join(cmd)}[/dim]")
-                    
-                    result = subprocess.run(cmd, 
-                                          capture_output=True, 
-                                          text=True,
-                                          timeout=120,
-                                          cwd=self._find_project_root(test_file_path))
-                    
-                    if result.returncode == 0 or 'Tests run:' in result.stdout:
-                        return self._parse_maven_results(result, test_file_path)
-                    
-                except subprocess.TimeoutExpired:
-                    continue
-                except Exception as e:
-                    console.print(f"[dim]Maven command failed: {e}[/dim]")
-                    continue
+            console.print("[dim]Running Maven test...[/dim]")
             
-            return {'success': False, 'error': 'All Maven command variations failed'}
+            # Run Maven test with timeout
+            result = subprocess.run(['mvn', 'test', '-q'], 
+                                  capture_output=True, 
+                                  text=True,
+                                  timeout=120,
+                                  cwd=pom_path.parent,
+                                  encoding='utf-8',
+                                  errors='replace')
             
+            return self._parse_maven_output(result, test_file_path)
+            
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'error': 'Maven test execution timed out'}
         except Exception as e:
             return {'success': False, 'error': f'Maven execution failed: {str(e)}'}
     
     def _run_with_gradle(self, test_file_path: str) -> Dict[str, Any]:
-        """Strategy 2: Run with Gradle"""
+        """Strategy 3: Run with Gradle"""
         if not self.gradle_available:
             return {'success': False, 'error': 'Gradle not available'}
         
         try:
-            console.print("[dim]Trying Gradle execution...[/dim]")
+            # Check for build.gradle or create minimal one
+            test_dir = Path(test_file_path).parent
+            gradle_file = self._find_or_create_gradle_build(test_dir, test_file_path)
             
-            # Ensure Gradle structure
-            self._ensure_gradle_structure(test_file_path)
+            if not gradle_file:
+                return {'success': False, 'error': 'Could not create Gradle project structure'}
             
-            test_class = Path(test_file_path).stem
+            # Ensure proper Gradle directory structure
+            self._setup_gradle_structure(gradle_file.parent, test_file_path)
             
-            gradle_commands = [
-                ['gradle', 'test', '--tests', test_class],
-                ['./gradlew', 'test', '--tests', test_class],
-                ['gradle', 'test'],
-                ['./gradlew', 'test']
-            ]
+            console.print("[dim]Running Gradle test...[/dim]")
             
-            for cmd in gradle_commands:
-                try:
-                    console.print(f"[dim]Running: {' '.join(cmd)}[/dim]")
-                    
-                    result = subprocess.run(cmd, 
-                                          capture_output=True, 
-                                          text=True,
-                                          timeout=120,
-                                          cwd=self._find_project_root(test_file_path))
-                    
-                    if result.returncode == 0 or 'BUILD SUCCESSFUL' in result.stdout:
-                        return self._parse_gradle_results(result, test_file_path)
-                    
-                except subprocess.TimeoutExpired:
-                    continue
-                except FileNotFoundError:
-                    continue
-                except Exception as e:
-                    console.print(f"[dim]Gradle command failed: {e}[/dim]")
-                    continue
+            # Run Gradle test
+            result = subprocess.run(['gradle', 'test', '--info'], 
+                                  capture_output=True, 
+                                  text=True,
+                                  timeout=120,
+                                  cwd=gradle_file.parent,
+                                  encoding='utf-8',
+                                  errors='replace')
             
-            return {'success': False, 'error': 'All Gradle command variations failed'}
+            return self._parse_gradle_output(result, test_file_path)
             
+        except subprocess.TimeoutExpired:
+            return {'success': False, 'error': 'Gradle test execution timed out'}
         except Exception as e:
             return {'success': False, 'error': f'Gradle execution failed: {str(e)}'}
     
-    def _run_with_junit_direct(self, test_file_path: str) -> Dict[str, Any]:
-        """Strategy 3: Run with JUnit directly using standalone JAR"""
-        if not self.java_available or not self.junit_jar:
-            return {'success': False, 'error': 'Java or JUnit JAR not available'}
-        
+    def _run_basic_compilation_check(self, test_file_path: str) -> Dict[str, Any]:
+        """Strategy 4: Basic compilation and structure validation"""
         try:
-            console.print("[dim]Trying direct JUnit execution...[/dim]")
+            console.print("[dim]Performing Java compilation check...[/dim]")
             
-            # Compile the test file first
-            compilation_result = self._compile_java_test(test_file_path)
-            if not compilation_result['success']:
-                return compilation_result
+            if not self.javac_available:
+                # Fallback to basic file analysis
+                return self._analyze_java_test_structure(test_file_path)
             
-            # Run tests with JUnit console launcher
-            test_class = Path(test_file_path).stem
-            
-            junit_commands = [
-                ['java', '-jar', self.junit_jar, '--class-path', '.', '--select-class', test_class],
-                ['java', '-cp', f'.:{self.junit_jar}', 'org.junit.platform.console.ConsoleLauncher', '--select-class', test_class],
-                ['java', '-cp', f'{self.junit_jar}:.' , 'org.junit.platform.console.ConsoleLauncher', '--scan-classpath']
-            ]
-            
-            for cmd in junit_commands:
-                try:
-                    console.print(f"[dim]Running: {' '.join(cmd)}[/dim]")
-                    
-                    result = subprocess.run(cmd, 
-                                          capture_output=True, 
-                                          text=True,
-                                          timeout=60,
-                                          cwd=Path(test_file_path).parent)
-                    
-                    if 'successful' in result.stdout.lower() or 'passed' in result.stdout.lower():
-                        return self._parse_junit_direct_output(result, test_file_path)
-                    
-                except subprocess.TimeoutExpired:
-                    continue
-                except Exception as e:
-                    console.print(f"[dim]JUnit command failed: {e}[/dim]")
-                    continue
-            
-            return {'success': False, 'error': 'Direct JUnit execution failed'}
-            
-        except Exception as e:
-            return {'success': False, 'error': f'JUnit direct execution failed: {str(e)}'}
-    
-    def _run_with_java_compilation(self, test_file_path: str) -> Dict[str, Any]:
-        """Strategy 4: At minimum, compile and run basic Java test"""
-        if not self.java_available:
-            return {'success': False, 'error': 'Java not available'}
-        
-        try:
-            console.print("[dim]Trying Java compilation and basic execution...[/dim]")
-            
-            # First, try to compile
-            compilation_result = self._compile_java_test(test_file_path)
-            if not compilation_result['success']:
-                return compilation_result
-            
-            # Create a simple test runner
-            test_runner = self._create_java_test_runner(test_file_path)
-            
-            # Write runner to temporary file
-            runner_file = Path(test_file_path).parent / f"TestRunner{Path(test_file_path).stem}.java"
-            with open(runner_file, 'w') as f:
-                f.write(test_runner)
-            
-            # Compile the runner
-            compile_result = subprocess.run(['javac', str(runner_file)], 
-                                          capture_output=True, 
-                                          text=True,
-                                          timeout=30,
-                                          cwd=Path(test_file_path).parent)
-            
-            if compile_result.returncode != 0:
-                return {'success': False, 'error': 'Runner compilation failed'}
-            
-            # Run the test runner
-            runner_class = f"TestRunner{Path(test_file_path).stem}"
-            run_result = subprocess.run(['java', runner_class], 
-                                      capture_output=True, 
-                                      text=True,
-                                      timeout=30,
-                                      cwd=Path(test_file_path).parent)
-            
-            # Clean up
-            try:
-                runner_file.unlink()
-                (Path(test_file_path).parent / f"{runner_class}.class").unlink()
-            except:
-                pass
-            
-            return self._parse_java_runner_output(run_result, test_file_path)
-            
-        except Exception as e:
-            return {'success': False, 'error': f'Java compilation strategy failed: {str(e)}'}
-    
-    def _run_basic_syntax_check(self, test_file_path: str) -> Dict[str, Any]:
-        """Strategy 5: Basic syntax validation"""
-        try:
-            console.print("[dim]Performing syntax validation...[/dim]")
-            
-            if not self.java_available:
-                return self._analyze_java_file_structure(test_file_path)
-            
-            # Check syntax by attempting compilation
-            result = subprocess.run(['javac', '-cp', '.', test_file_path], 
+            # Try to compile the Java file
+            result = subprocess.run(['javac', test_file_path], 
                                   capture_output=True, 
                                   text=True,
-                                  timeout=30)
+                                  timeout=30,
+                                  encoding='utf-8',
+                                  errors='replace')
             
             if result.returncode == 0:
-                return self._analyze_java_file_structure(test_file_path)
+                # Compilation successful, analyze test structure
+                analysis = self._analyze_java_test_structure(test_file_path)
+                analysis['compilation_successful'] = True
+                return analysis
             else:
                 return {
                     'success': False,
-                    'error': f'Java syntax error: {result.stderr}',
-                    'syntax_valid': False
+                    'error': f'Java compilation error: {result.stderr}',
+                    'compilation_successful': False
                 }
                 
         except Exception as e:
-            return {'success': False, 'error': f'Syntax check failed: {str(e)}'}
+            return {'success': False, 'error': f'Compilation check failed: {str(e)}'}
     
-    def _ensure_maven_structure(self, test_file_path: str):
-        """Ensure minimal Maven structure exists"""
-        project_root = self._find_project_root(test_file_path)
-        pom_path = project_root / "pom.xml"
-        
-        if not pom_path.exists():
-            console.print("[dim]Creating minimal pom.xml for Maven...[/dim]")
+    def _ensure_junit_jars(self, junit_dir: Path) -> bool:
+        """Download JUnit JARs if they don't exist"""
+        try:
+            junit_dir.mkdir(parents=True, exist_ok=True)
             
-            pom_content = '''<?xml version="1.0" encoding="UTF-8"?>
+            # Check if JARs already exist
+            if list(junit_dir.glob("*.jar")):
+                console.print("[green]JUnit JARs already available[/green]")
+                return True
+            
+            console.print("[dim]Downloading JUnit JARs...[/dim]")
+            
+            # URLs for JUnit 5 JARs
+            junit_urls = {
+                "junit-jupiter-engine-5.8.2.jar": "https://repo1.maven.org/maven2/org/junit/jupiter/junit-jupiter-engine/5.8.2/junit-jupiter-engine-5.8.2.jar",
+                "junit-jupiter-api-5.8.2.jar": "https://repo1.maven.org/maven2/org/junit/jupiter/junit-jupiter-api/5.8.2/junit-jupiter-api-5.8.2.jar",
+                "junit-platform-console-standalone-1.8.2.jar": "https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.8.2/junit-platform-console-standalone-1.8.2.jar"
+            }
+            
+            # Try to download using various methods
+            import urllib.request
+            
+            for jar_name, url in junit_urls.items():
+                jar_path = junit_dir / jar_name
+                try:
+                    console.print(f"[dim]Downloading {jar_name}...[/dim]")
+                    urllib.request.urlretrieve(url, jar_path)
+                    console.print(f"[green]Downloaded {jar_name}[/green]")
+                    return True  # If we get at least one JAR, that's enough
+                except Exception as e:
+                    console.print(f"[yellow]Failed to download {jar_name}: {e}[/yellow]")
+                    continue
+            
+            # If download fails, try to find system JUnit
+            system_paths = [
+                "/usr/share/java/junit*.jar",
+                "/opt/junit/*.jar",
+                str(Path.home() / ".m2/repository/org/junit/**/*.jar")
+            ]
+            
+            for path_pattern in system_paths:
+                import glob
+                jars = glob.glob(path_pattern, recursive=True)
+                if jars:
+                    # Copy found JARs to our directory
+                    for jar in jars[:3]:  # Limit to first 3 JARs
+                        try:
+                            shutil.copy2(jar, junit_dir / Path(jar).name)
+                            console.print(f"[green]Found system JAR: {Path(jar).name}[/green]")
+                            return True
+                        except Exception as e:
+                            console.print(f"[yellow]Could not copy {jar}: {e}[/yellow]")
+            
+            return False
+            
+        except Exception as e:
+            console.print(f"[yellow]Failed to ensure JUnit JARs: {e}[/yellow]")
+            return False
+    
+    def _compile_java_test(self, test_file_path: str, junit_jars: List[Path]) -> Dict[str, Any]:
+        """Compile Java test file with JUnit"""
+        try:
+            classpath = ":".join(str(jar) for jar in junit_jars)
+            
+            cmd = ['javac', '-cp', classpath, test_file_path]
+            
+            console.print(f"[dim]Compiling: {' '.join(cmd)}[/dim]")
+            
+            result = subprocess.run(cmd, 
+                                  capture_output=True, 
+                                  text=True,
+                                  timeout=30,
+                                  encoding='utf-8',
+                                  errors='replace')
+            
+            if result.returncode == 0:
+                console.print("[green]Compilation successful[/green]")
+                return {'success': True, 'message': 'Compilation successful'}
+            else:
+                return {
+                    'success': False,
+                    'error': f'Compilation failed: {result.stderr}'
+                }
+                
+        except Exception as e:
+            return {'success': False, 'error': f'Compilation error: {str(e)}'}
+    
+    def _execute_junit_test(self, test_file_path: str, junit_jars: List[Path]) -> Dict[str, Any]:
+        """Execute compiled JUnit test"""
+        try:
+            test_class = Path(test_file_path).stem
+            test_dir = Path(test_file_path).parent
+            
+            # Find the console standalone JAR
+            console_jar = None
+            for jar in junit_jars:
+                if 'console-standalone' in jar.name:
+                    console_jar = jar
+                    break
+            
+            if console_jar:
+                # Use JUnit Platform Console Launcher
+                cmd = [
+                    'java', '-jar', str(console_jar),
+                    '--class-path', str(test_dir),
+                    '--select-class', test_class
+                ]
+            else:
+                # Fallback to direct execution
+                classpath = ":".join(str(jar) for jar in junit_jars) + ":" + str(test_dir)
+                cmd = [
+                    'java', '-cp', classpath,
+                    'org.junit.platform.console.ConsoleLauncher',
+                    '--select-class', test_class
+                ]
+            
+            console.print(f"[dim]Executing: {' '.join(cmd)}[/dim]")
+            
+            result = subprocess.run(cmd, 
+                                  capture_output=True, 
+                                  text=True,
+                                  timeout=60,
+                                  cwd=test_dir,
+                                  encoding='utf-8',
+                                  errors='replace')
+            
+            return self._parse_junit_console_output(result, test_file_path)
+            
+        except Exception as e:
+            return {'success': False, 'error': f'JUnit execution error: {str(e)}'}
+    
+    def _find_or_create_pom(self, test_dir: Path, test_file_path: str) -> Optional[Path]:
+        """Find existing pom.xml or create a minimal one"""
+        # Look for existing pom.xml in parent directories
+        current_dir = test_dir
+        for _ in range(5):  # Check up to 5 levels up
+            pom_path = current_dir / "pom.xml"
+            if pom_path.exists():
+                console.print(f"[green]Found existing pom.xml: {pom_path}[/green]")
+                return pom_path
+            current_dir = current_dir.parent
+            if current_dir == current_dir.parent:  # Reached root
+                break
+        
+        # Create minimal pom.xml
+        pom_path = test_dir / "pom.xml"
+        
+        pom_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
          http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     
-    <groupId>com.generated</groupId>
-    <artifactId>test-project</artifactId>
-    <version>1.0.0</version>
+    <groupId>com.generated.tests</groupId>
+    <artifactId>generated-java-tests</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
     
     <properties>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
-        <junit.version>5.9.3</junit.version>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <junit.version>5.8.2</junit.version>
     </properties>
     
     <dependencies>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>${junit.version}</version>
+            <version>${{junit.version}}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -352,28 +430,54 @@ class JunitRunner:
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.0.0</version>
+                <version>3.0.0-M7</version>
+                <configuration>
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/Test*.java</include>
+                    </includes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <source>8</source>
+                    <target>8</target>
+                </configuration>
             </plugin>
         </plugins>
     </build>
-</project>'''
-            
-            with open(pom_path, 'w') as f:
+</project>"""
+        
+        try:
+            with open(pom_path, 'w', encoding='utf-8') as f:
                 f.write(pom_content)
-        
-        # Ensure test directory structure
-        test_dir = project_root / "src" / "test" / "java"
-        test_dir.mkdir(parents=True, exist_ok=True)
+            console.print(f"[green]Created minimal pom.xml: {pom_path}[/green]")
+            return pom_path
+        except Exception as e:
+            console.print(f"[yellow]Failed to create pom.xml: {e}[/yellow]")
+            return None
     
-    def _ensure_gradle_structure(self, test_file_path: str):
-        """Ensure minimal Gradle structure exists"""
-        project_root = self._find_project_root(test_file_path)
-        build_gradle = project_root / "build.gradle"
+    def _find_or_create_gradle_build(self, test_dir: Path, test_file_path: str) -> Optional[Path]:
+        """Find existing build.gradle or create a minimal one"""
+        # Look for existing build.gradle
+        current_dir = test_dir
+        for _ in range(5):
+            gradle_path = current_dir / "build.gradle"
+            if gradle_path.exists():
+                console.print(f"[green]Found existing build.gradle: {gradle_path}[/green]")
+                return gradle_path
+            current_dir = current_dir.parent
+            if current_dir == current_dir.parent:
+                break
         
-        if not build_gradle.exists():
-            console.print("[dim]Creating minimal build.gradle...[/dim]")
-            
-            gradle_content = '''plugins {
+        # Create minimal build.gradle
+        gradle_path = test_dir / "build.gradle"
+        
+        gradle_content = """
+plugins {
     id 'java'
 }
 
@@ -382,152 +486,123 @@ repositories {
 }
 
 dependencies {
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.9.3'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.8.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 test {
     useJUnitPlatform()
-}'''
-            
-            with open(build_gradle, 'w') as f:
-                f.write(gradle_content)
-        
-        # Ensure test directory structure
-        test_dir = project_root / "src" / "test" / "java"
-        test_dir.mkdir(parents=True, exist_ok=True)
-    
-    def _find_project_root(self, test_file_path: str) -> Path:
-        """Find the project root directory"""
-        current = Path(test_file_path).parent
-        
-        # Look for Maven or Gradle files
-        while current != current.parent:
-            if (current / "pom.xml").exists() or (current / "build.gradle").exists():
-                return current
-            current = current.parent
-        
-        # Default to test file directory
-        return Path(test_file_path).parent
-    
-    def _compile_java_test(self, test_file_path: str) -> Dict[str, Any]:
-        """Compile Java test file"""
-        try:
-            # Try compilation with different classpath configurations
-            compile_commands = [
-                ['javac', '-cp', '.', test_file_path],
-                ['javac', test_file_path],
-                ['javac', '-cp', f'.:{self.junit_jar}', test_file_path] if self.junit_jar else None
-            ]
-            
-            # Filter out None commands
-            compile_commands = [cmd for cmd in compile_commands if cmd is not None]
-            
-            for cmd in compile_commands:
-                try:
-                    result = subprocess.run(cmd, 
-                                          capture_output=True, 
-                                          text=True,
-                                          timeout=30,
-                                          cwd=Path(test_file_path).parent)
-                    
-                    if result.returncode == 0:
-                        return {'success': True, 'message': 'Compilation successful'}
-                    
-                except subprocess.TimeoutExpired:
-                    continue
-                except Exception:
-                    continue
-            
-            return {'success': False, 'error': 'All compilation attempts failed'}
-            
-        except Exception as e:
-            return {'success': False, 'error': f'Compilation failed: {str(e)}'}
-    
-    def _create_java_test_runner(self, test_file_path: str) -> str:
-        """Create a basic Java test runner"""
-        
-        # Read the test file to understand its structure
-        with open(test_file_path, 'r') as f:
-            content = f.read()
-        
-        test_class = Path(test_file_path).stem
-        package_match = re.search(r'package\s+([^;]+);', content)
-        package_name = package_match.group(1) if package_match else ""
-        
-        # Find test methods
-        test_methods = re.findall(r'@Test\s+(?:public\s+)?void\s+(\w+)', content)
-        
-        runner_class = f"TestRunner{test_class}"
-        
-        runner_content = f'''
-import java.lang.reflect.Method;
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+        showStandardStreams = true
+    }
+}
 
-public class {runner_class} {{
-    public static void main(String[] args) {{
-        int passed = 0;
-        int failed = 0;
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+"""
         
-        try {{
-            Class<?> testClass = Class.forName("{package_name + '.' + test_class if package_name else test_class}");
-            Object testInstance = testClass.getDeclaredConstructor().newInstance();
-            
-            Method[] methods = testClass.getDeclaredMethods();
-            
-            for (Method method : methods) {{
-                if (method.getName().startsWith("test") || method.isAnnotationPresent(org.junit.Test.class) || method.isAnnotationPresent(org.junit.jupiter.api.Test.class)) {{
-                    try {{
-                        System.out.println("Running: " + method.getName());
-                        method.invoke(testInstance);
-                        passed++;
-                        System.out.println("✅ " + method.getName() + " PASSED");
-                    }} catch (Exception e) {{
-                        failed++;
-                        System.out.println("❌ " + method.getName() + " FAILED: " + e.getCause().getMessage());
-                    }}
-                }}
-            }}
-            
-            System.out.println("\\n=== RESULTS ===");
-            System.out.println("RESULTS: " + passed + " passed, " + failed + " failed");
-            
-        }} catch (Exception e) {{
-            System.out.println("EXECUTION ERROR: " + e.getMessage());
-            e.printStackTrace();
-        }}
-    }}
-}}'''
-        
-        return runner_content
-    
-    def _analyze_java_file_structure(self, test_file_path: str) -> Dict[str, Any]:
-        """Analyze Java test file structure"""
         try:
-            with open(test_file_path, 'r') as f:
+            with open(gradle_path, 'w', encoding='utf-8') as f:
+                f.write(gradle_content)
+            console.print(f"[green]Created minimal build.gradle: {gradle_path}[/green]")
+            return gradle_path
+        except Exception as e:
+            console.print(f"[yellow]Failed to create build.gradle: {e}[/yellow]")
+            return None
+    
+    def _setup_maven_structure(self, project_dir: Path, test_file_path: str):
+        """Setup proper Maven directory structure"""
+        # Create Maven directory structure
+        src_test_java = project_dir / "src" / "test" / "java"
+        src_test_java.mkdir(parents=True, exist_ok=True)
+        
+        # Copy test file to proper location if not already there
+        test_file = Path(test_file_path)
+        target_file = src_test_java / test_file.name
+        
+        if not target_file.exists() and test_file.exists():
+            try:
+                shutil.copy2(test_file, target_file)
+                console.print(f"[green]Copied test file to Maven structure: {target_file}[/green]")
+            except Exception as e:
+                console.print(f"[yellow]Warning: Could not copy test file: {e}[/yellow]")
+    
+    def _setup_gradle_structure(self, project_dir: Path, test_file_path: str):
+        """Setup proper Gradle directory structure"""
+        # Create Gradle directory structure
+        src_test_java = project_dir / "src" / "test" / "java"
+        src_test_java.mkdir(parents=True, exist_ok=True)
+        
+        # Copy test file to proper location if not already there
+        test_file = Path(test_file_path)
+        target_file = src_test_java / test_file.name
+        
+        if not target_file.exists() and test_file.exists():
+            try:
+                shutil.copy2(test_file, target_file)
+                console.print(f"[green]Copied test file to Gradle structure: {target_file}[/green]")
+            except Exception as e:
+                console.print(f"[yellow]Warning: Could not copy test file: {e}[/yellow]")
+    
+    def _analyze_java_test_structure(self, test_file_path: str) -> Dict[str, Any]:
+        """Analyze Java test file structure without execution"""
+        try:
+            with open(test_file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            # Count test methods and annotations
-            test_annotations = len(re.findall(r'@Test', content))
-            test_methods = len(re.findall(r'void\s+test\w+', content))
-            junit_imports = len(re.findall(r'import.*junit', content, re.IGNORECASE))
+            # Count test methods and assertions
+            test_patterns = [
+                (r'@Test\s+public\s+void\s+(\w+)', 'public test methods'),
+                (r'@Test\s+void\s+(\w+)', 'void test methods'),
+                (r'public\s+void\s+test(\w+)', 'test methods by convention')
+            ]
             
-            # Look for class definition
-            class_match = re.search(r'public\s+class\s+(\w+)', content)
-            class_name = class_match.group(1) if class_match else 'Unknown'
+            assertion_patterns = [
+                (r'assertEquals\s*\(', 'assertEquals'),
+                (r'assertTrue\s*\(', 'assertTrue'),
+                (r'assertFalse\s*\(', 'assertFalse'),
+                (r'assertNotNull\s*\(', 'assertNotNull'),
+                (r'assertNull\s*\(', 'assertNull'),
+                (r'assertThrows\s*\(', 'assertThrows')
+            ]
             
-            total_tests = max(test_annotations, test_methods)
+            test_methods = []
+            test_counts = {}
+            
+            for pattern, name in test_patterns:
+                matches = re.findall(pattern, content)
+                test_methods.extend(matches)
+                test_counts[name] = len(matches)
+            
+            assertion_counts = {}
+            total_assertions = 0
+            
+            for pattern, name in assertion_patterns:
+                count = len(re.findall(pattern, content))
+                assertion_counts[name] = count
+                total_assertions += count
+            
+            # Look for imports
+            imports = re.findall(r'import\s+([^;]+);', content)
             
             return {
                 'success': True,
                 'passed': 0,
                 'failed': 0,
                 'syntax_valid': True,
-                'potential_tests': total_tests,
+                'test_methods_found': len(test_methods),
+                'test_method_names': test_methods,
+                'assertion_count': total_assertions,
+                'assertion_breakdown': assertion_counts,
+                'test_count_breakdown': test_counts,
+                'imports_found': imports,
                 'test_file': test_file_path,
                 'method': 'structure_analysis',
-                'class_name': class_name,
-                'test_annotations': test_annotations,
-                'junit_imports': junit_imports,
-                'message': f'Structure valid. Found {total_tests} potential test methods in class {class_name}.'
+                'message': f'Structure valid. Found {len(test_methods)} test methods and {total_assertions} assertions.'
             }
             
         except Exception as e:
@@ -536,218 +611,253 @@ public class {runner_class} {{
                 'error': f'Structure analysis failed: {str(e)}'
             }
     
-    def _parse_maven_results(self, result: subprocess.CompletedProcess, test_file_path: str) -> Dict[str, Any]:
-        """Parse Maven test results"""
+    def _parse_maven_output(self, result: subprocess.CompletedProcess, test_file_path: str) -> Dict[str, Any]:
+        """Parse Maven test output"""
         output = result.stdout + result.stderr
         
-        # Look for Surefire reports first
-        surefire_dir = self._find_project_root(test_file_path) / "target" / "surefire-reports"
-        if surefire_dir.exists():
-            xml_result = self._parse_surefire_xml(surefire_dir, test_file_path)
-            if xml_result['success']:
-                return xml_result
-        
-        # Fallback to text parsing
-        return self._parse_maven_text_output(output, test_file_path, result.returncode)
-    
-    def _parse_gradle_results(self, result: subprocess.CompletedProcess, test_file_path: str) -> Dict[str, Any]:
-        """Parse Gradle test results"""
-        output = result.stdout + result.stderr
-        
-        # Look for Gradle test reports
-        test_reports_dir = self._find_project_root(test_file_path) / "build" / "test-results" / "test"
-        if test_reports_dir.exists():
-            xml_result = self._parse_gradle_xml(test_reports_dir, test_file_path)
-            if xml_result['success']:
-                return xml_result
-        
-        # Fallback to text parsing
-        return self._parse_gradle_text_output(output, test_file_path, result.returncode)
-    
-    def _parse_junit_direct_output(self, result: subprocess.CompletedProcess, test_file_path: str) -> Dict[str, Any]:
-        """Parse direct JUnit console launcher output"""
-        output = result.stdout + result.stderr
-        
-        # JUnit Platform Console Launcher output patterns
-        success_pattern = r'Test run finished after \d+ ms.*?(\d+) tests found.*?(\d+) tests successful.*?(\d+) tests failed'
-        match = re.search(success_pattern, output, re.DOTALL)
-        
-        if match:
-            found = int(match.group(1))
-            successful = int(match.group(2))
-            failed = int(match.group(3))
+        try:
+            # Look for Maven Surefire test results
+            patterns = [
+                (r'Tests run: (\d+), Failures: (\d+), Errors: (\d+), Skipped: (\d+)', 'surefire'),
+                (r'Tests: (\d+), Failures: (\d+), Errors: (\d+), Skipped: (\d+)', 'alternative'),
+                (r'(\d+) tests completed, (\d+) failed', 'simple')
+            ]
             
+            for pattern, pattern_type in patterns:
+                match = re.search(pattern, output)
+                if match:
+                    if pattern_type == 'surefire' or pattern_type == 'alternative':
+                        tests_run = int(match.group(1))
+                        failures = int(match.group(2))
+                        errors = int(match.group(3))
+                        skipped = int(match.group(4))
+                        passed = tests_run - failures - errors - skipped
+                    else:  # simple
+                        tests_run = int(match.group(1))
+                        failed = int(match.group(2))
+                        passed = tests_run - failed
+                        failures = failed
+                        errors = 0
+                        skipped = 0
+                    
+                    return {
+                        'success': result.returncode == 0 and failures == 0 and errors == 0,
+                        'passed': passed,
+                        'failed': failures + errors,
+                        'skipped': skipped,
+                        'total': tests_run,
+                        'test_file': test_file_path,
+                        'method': 'maven',
+                        'output': output
+                    }
+            
+            # Look for BUILD SUCCESS/FAILURE
+            if 'BUILD SUCCESS' in output:
+                return {
+                    'success': True,
+                    'passed': 1,
+                    'failed': 0,
+                    'skipped': 0,
+                    'test_file': test_file_path,
+                    'method': 'maven_build_success',
+                    'output': output,
+                    'message': 'Maven build successful'
+                }
+            elif 'BUILD FAILURE' in output:
+                return {
+                    'success': False,
+                    'passed': 0,
+                    'failed': 1,
+                    'error': 'Maven build failed',
+                    'test_file': test_file_path,
+                    'method': 'maven_build_failure',
+                    'output': output
+                }
+            
+            # Check for compilation errors
+            if 'COMPILATION ERROR' in output:
+                return {
+                    'success': False,
+                    'passed': 0,
+                    'failed': 1,
+                    'error': 'Compilation error',
+                    'test_file': test_file_path,
+                    'method': 'maven_compile_error',
+                    'output': output
+                }
+            
+            # Default fallback
             return {
-                'success': failed == 0,
-                'passed': successful,
-                'failed': failed,
-                'skipped': found - successful - failed,
-                'duration': 1.0,
-                'test_file': test_file_path,
-                'method': 'junit_direct'
-            }
-        
-        # Fallback pattern matching
-        if 'successful' in output.lower():
-            return {
-                'success': True,
-                'passed': 1,
-                'failed': 0,
+                'success': result.returncode == 0,
+                'passed': 1 if result.returncode == 0 else 0,
+                'failed': 0 if result.returncode == 0 else 1,
                 'skipped': 0,
-                'duration': 1.0,
                 'test_file': test_file_path,
-                'method': 'junit_direct_simple'
+                'method': 'maven_fallback',
+                'output': output
             }
-        
-        return {
-            'success': False,
-            'error': 'Could not parse JUnit output',
-            'output': output
-        }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Maven output parsing failed: {str(e)}',
+                'output': output
+            }
     
-    def _parse_java_runner_output(self, result: subprocess.CompletedProcess, test_file_path: str) -> Dict[str, Any]:
-        """Parse custom Java runner output"""
+    def _parse_gradle_output(self, result: subprocess.CompletedProcess, test_file_path: str) -> Dict[str, Any]:
+        """Parse Gradle test output"""
         output = result.stdout + result.stderr
         
-        # Look for our custom output patterns
-        passed_matches = output.count("PASSED")
-        failed_matches = output.count("FAILED")
-        
-        # Extract results summary if present
-        results_match = re.search(r'RESULTS: (\d+) passed, (\d+) failed', output)
-        if results_match:
-            passed = int(results_match.group(1))
-            failed = int(results_match.group(2))
-        else:
-            passed = passed_matches
-            failed = failed_matches
-        
-        return {
-            'success': result.returncode == 0 and failed == 0,
-            'passed': passed,
-            'failed': failed,
-            'skipped': 0,
-            'duration': 0,
-            'test_file': test_file_path,
-            'output': output,
-            'method': 'java_runner'
-        }
-    
-    def _parse_surefire_xml(self, surefire_dir: Path, test_file_path: str) -> Dict[str, Any]:
-        """Parse Surefire XML test reports"""
         try:
-            for xml_file in surefire_dir.glob("TEST-*.xml"):
-                tree = ET.parse(xml_file)
-                root = tree.getroot()
-                
-                return {
-                    'success': root.get('failures', '0') == '0' and root.get('errors', '0') == '0',
-                    'passed': int(root.get('tests', '0')) - int(root.get('failures', '0')) - int(root.get('errors', '0')),
-                    'failed': int(root.get('failures', '0')) + int(root.get('errors', '0')),
-                    'skipped': int(root.get('skipped', '0')),
-                    'duration': float(root.get('time', '0')),
-                    'test_file': test_file_path,
-                    'method': 'surefire_xml'
-                }
+            # Look for Gradle test summary patterns
+            patterns = [
+                (r'(\d+) tests completed, (\d+) failed, (\d+) skipped', 'detailed'),
+                (r'(\d+) tests completed, (\d+) failed', 'simple'),
+                (r'BUILD SUCCESSFUL', 'build_success'),
+                (r'BUILD FAILED', 'build_failed')
+            ]
+            
+            for pattern, pattern_type in patterns:
+                if pattern_type in ['build_success', 'build_failed']:
+                    if re.search(pattern, output):
+                        return {
+                            'success': pattern_type == 'build_success',
+                            'passed': 1 if pattern_type == 'build_success' else 0,
+                            'failed': 0 if pattern_type == 'build_success' else 1,
+                            'skipped': 0,
+                            'test_file': test_file_path,
+                            'method': f'gradle_{pattern_type}',
+                            'output': output,
+                            'message': f'Gradle {pattern_type.replace("_", " ")}'
+                        }
+                else:
+                    match = re.search(pattern, output)
+                    if match:
+                        completed = int(match.group(1))
+                        failed = int(match.group(2))
+                        skipped = int(match.group(3)) if pattern_type == 'detailed' else 0
+                        passed = completed - failed - skipped
+                        
+                        return {
+                            'success': result.returncode == 0 and failed == 0,
+                            'passed': passed,
+                            'failed': failed,
+                            'skipped': skipped,
+                            'total': completed,
+                            'test_file': test_file_path,
+                            'method': 'gradle',
+                            'output': output
+                        }
+            
+            # Fallback
+            return {
+                'success': result.returncode == 0,
+                'passed': 1 if result.returncode == 0 else 0,
+                'failed': 0 if result.returncode == 0 else 1,
+                'skipped': 0,
+                'test_file': test_file_path,
+                'method': 'gradle_fallback',
+                'output': output
+            }
+            
         except Exception as e:
-            console.print(f"[dim]XML parsing failed: {e}[/dim]")
-        
-        return {'success': False, 'error': 'XML parsing failed'}
+            return {
+                'success': False,
+                'error': f'Gradle output parsing failed: {str(e)}',
+                'output': output
+            }
     
-    def _parse_gradle_xml(self, test_dir: Path, test_file_path: str) -> Dict[str, Any]:
-        """Parse Gradle XML test reports"""
+    def _parse_junit_console_output(self, result: subprocess.CompletedProcess, test_file_path: str) -> Dict[str, Any]:
+        """Parse JUnit Console Launcher output"""
+        output = result.stdout + result.stderr
+        
         try:
-            for xml_file in test_dir.glob("TEST-*.xml"):
-                tree = ET.parse(xml_file)
-                root = tree.getroot()
-                
+            # JUnit 5 console output patterns
+            patterns = [
+                (r'Test run finished after \d+ ms.*?(\d+) tests found.*?(\d+) tests successful.*?(\d+) tests failed', 'detailed'),
+                (r'(\d+) tests found.*?(\d+) tests successful.*?(\d+) tests failed', 'simple'),
+                (r'(\d+) tests successful', 'success_only'),
+                (r'(\d+) tests failed', 'failure_only')
+            ]
+            
+            for pattern, pattern_type in patterns:
+                match = re.search(pattern, output, re.DOTALL)
+                if match:
+                    if pattern_type == 'detailed':
+                        tests_found = int(match.group(1))
+                        tests_successful = int(match.group(2))
+                        tests_failed = int(match.group(3))
+                    elif pattern_type == 'simple':
+                        tests_found = int(match.group(1))
+                        tests_successful = int(match.group(2))
+                        tests_failed = int(match.group(3))
+                    elif pattern_type == 'success_only':
+                        tests_successful = int(match.group(1))
+                        tests_failed = 0
+                        tests_found = tests_successful
+                    else:  # failure_only
+                        tests_failed = int(match.group(1))
+                        tests_successful = 0
+                        tests_found = tests_failed
+                    
+                    return {
+                        'success': result.returncode == 0 and tests_failed == 0,
+                        'passed': tests_successful,
+                        'failed': tests_failed,
+                        'total': tests_found,
+                        'test_file': test_file_path,
+                        'method': 'junit_console',
+                        'output': output
+                    }
+            
+            # If no specific patterns found, check for general success/failure
+            if result.returncode == 0:
                 return {
-                    'success': root.get('failures', '0') == '0' and root.get('errors', '0') == '0',
-                    'passed': int(root.get('tests', '0')) - int(root.get('failures', '0')) - int(root.get('errors', '0')),
-                    'failed': int(root.get('failures', '0')) + int(root.get('errors', '0')),
-                    'skipped': int(root.get('skipped', '0')),
-                    'duration': float(root.get('time', '0')),
+                    'success': True,
+                    'passed': 1,
+                    'failed': 0,
                     'test_file': test_file_path,
-                    'method': 'gradle_xml'
+                    'method': 'junit_console_success',
+                    'output': output
                 }
+            else:
+                return {
+                    'success': False,
+                    'passed': 0,
+                    'failed': 1,
+                    'test_file': test_file_path,
+                    'method': 'junit_console_failure',
+                    'output': output
+                }
+            
         except Exception as e:
-            console.print(f"[dim]XML parsing failed: {e}[/dim]")
-        
-        return {'success': False, 'error': 'XML parsing failed'}
-    
-    def _parse_maven_text_output(self, output: str, test_file_path: str, return_code: int) -> Dict[str, Any]:
-        """Parse Maven text output"""
-        # Extract test counts
-        tests_run_match = re.search(r'Tests run: (\d+)', output)
-        failures_match = re.search(r'Failures: (\d+)', output)
-        errors_match = re.search(r'Errors: (\d+)', output)
-        skipped_match = re.search(r'Skipped: (\d+)', output)
-        
-        tests_run = int(tests_run_match.group(1)) if tests_run_match else 0
-        failures = int(failures_match.group(1)) if failures_match else 0
-        errors = int(errors_match.group(1)) if errors_match else 0
-        skipped = int(skipped_match.group(1)) if skipped_match else 0
-        
-        passed = tests_run - failures - errors
-        
-        return {
-            'success': return_code == 0 and failures == 0 and errors == 0,
-            'passed': passed,
-            'failed': failures + errors,
-            'skipped': skipped,
-            'duration': 1.0,
-            'test_file': test_file_path,
-            'method': 'maven_text'
-        }
-    
-    def _parse_gradle_text_output(self, output: str, test_file_path: str, return_code: int) -> Dict[str, Any]:
-        """Parse Gradle text output"""
-        # Look for test summary in Gradle output
-        summary_match = re.search(r'(\d+) tests completed, (\d+) failed', output)
-        
-        if summary_match:
-            total = int(summary_match.group(1))
-            failed = int(summary_match.group(2))
-            passed = total - failed
-        else:
-            # Alternative patterns
-            passed = len(re.findall(r'✓', output)) or len(re.findall(r'PASSED', output))
-            failed = len(re.findall(r'✗', output)) or len(re.findall(r'FAILED', output))
-        
-        return {
-            'success': return_code == 0 and failed == 0,
-            'passed': passed,
-            'failed': failed,
-            'skipped': 0,
-            'duration': 1.0,
-            'test_file': test_file_path,
-            'method': 'gradle_text'
-        }
+            return {
+                'success': False,
+                'error': f'JUnit console output parsing failed: {str(e)}',
+                'output': output
+            }
     
     def get_installation_instructions(self) -> Dict[str, Any]:
         """Get instructions for installing Java testing dependencies"""
         return {
             'java': {
-                'command': 'Download from https://adoptium.net/',
-                'description': 'Install Java Development Kit (JDK)'
+                'command': 'Install JDK 8 or later from https://adoptopenjdk.net/',
+                'description': 'Java Development Kit required for compilation and execution',
+                'verification': 'java -version && javac -version'
             },
             'maven': {
-                'command': 'Download from https://maven.apache.org/',
-                'description': 'Install Apache Maven for project management'
+                'command': 'Install Apache Maven from https://maven.apache.org/',
+                'description': 'Build tool for Java projects with dependency management',
+                'verification': 'mvn --version'
             },
             'gradle': {
-                'command': 'Download from https://gradle.org/',
-                'description': 'Install Gradle as alternative to Maven'
+                'command': 'Install Gradle from https://gradle.org/',
+                'description': 'Alternative build tool for Java projects',
+                'verification': 'gradle --version'
             },
-            'junit_jar': {
-                'command': 'Download JUnit Platform Console Standalone JAR',
-                'url': 'https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/',
-                'description': 'Download standalone JUnit JAR for direct execution'
-            },
-            'verification': {
-                'java': 'java -version',
-                'maven': 'mvn --version',
-                'gradle': 'gradle --version'
+            'junit': {
+                'description': 'JUnit will be automatically downloaded or managed by Maven/Gradle',
+                'manual_download': 'JARs will be automatically downloaded if needed'
             }
         }
     
@@ -755,46 +865,33 @@ public class {runner_class} {{
         """Diagnose the Java testing environment"""
         diagnosis = {
             'java_available': self.java_available,
+            'javac_available': self.javac_available,
             'maven_available': self.maven_available,
             'gradle_available': self.gradle_available,
-            'junit_jar_found': self.junit_jar is not None,
-            'junit_jar_path': self.junit_jar,
             'recommendations': []
         }
         
         if not self.java_available:
-            diagnosis['recommendations'].append('Install Java JDK from https://adoptium.net/')
+            diagnosis['recommendations'].append('Install Java JDK (version 8 or later recommended)')
+        
+        if not self.javac_available:
+            diagnosis['recommendations'].append('Install Java Development Kit (JDK) - not just JRE')
         
         if not self.maven_available and not self.gradle_available:
-            diagnosis['recommendations'].append('Install either Maven or Gradle for project management')
+            diagnosis['recommendations'].append('Install either Maven or Gradle for dependency management')
         
-        if not self.junit_jar:
-            diagnosis['recommendations'].append('Download JUnit Platform Console Standalone JAR for direct test execution')
+        # Check for common Java project files
+        try:
+            has_pom = os.path.exists('pom.xml')
+            has_gradle = os.path.exists('build.gradle')
+            
+            diagnosis['has_maven_project'] = has_pom
+            diagnosis['has_gradle_project'] = has_gradle
+            
+            if not has_pom and not has_gradle:
+                diagnosis['recommendations'].append('Consider creating a Maven (pom.xml) or Gradle (build.gradle) project')
+                
+        except:
+            pass
         
         return diagnosis
-    
-    def _check_maven_available(self) -> bool:
-        """Check if Maven is available"""
-        try:
-            result = subprocess.run(['mvn', '--version'], 
-                                  capture_output=True, text=True, timeout=5)
-            available = result.returncode == 0
-            if available:
-                version_line = result.stdout.split('\n')[0]
-                console.print(f"[green]✅ Maven available: {version_line}[/green]")
-            else:
-                console.print("[yellow]⚠️ Maven not available[/yellow]")
-            return available
-        except Exception as e:
-            console.print(f"[yellow]⚠️ Could not check Maven: {e}[/yellow]")
-            return False
-    
-    def _check_gradle_available(self) -> bool:
-        """Check if Gradle is available"""
-        try:
-            result = subprocess.run(['gradle', '--version'], 
-                                  capture_output=True, text=True, timeout=5)
-            available = result.returncode == 0
-        except Exception as e:
-            console.print(f"[yellow]⚠️ Could not check Gradle: {e}[/yellow]")
-            return False

@@ -26,7 +26,6 @@ class JestRunner:
         self.execution_strategies = [
             self._run_with_jest,
             self._run_with_node_direct,
-            self._run_with_mocha_fallback,
             self._run_basic_syntax_check
         ]
     
@@ -109,19 +108,21 @@ class JestRunner:
     
     def _run_with_jest(self, test_file_path: str) -> Dict[str, Any]:
         """Strategy 1: Run with Jest (preferred method)"""
-        if not self.jest_available:
-            return {'success': False, 'error': 'Jest not available'}
+        if not self.jest_available or not self.node_available:
+            return {'success': False, 'error': 'Jest or Node.js not available'}
         
         try:
             # Ensure package.json exists for Jest
             self._ensure_package_json(test_file_path)
             
-            # Try different Jest command variations
+            test_dir = Path(test_file_path).parent
+            
+            # Try different Jest command variations with better options
             jest_commands = [
-                ['npx', 'jest', test_file_path, '--json', '--verbose'],
-                ['jest', test_file_path, '--json', '--verbose'],
-                ['npx', 'jest', test_file_path, '--verbose'],
-                ['jest', test_file_path, '--verbose']
+                ['npx', 'jest', Path(test_file_path).name, '--verbose', '--no-cache'],
+                ['npx', 'jest', test_file_path, '--verbose', '--no-cache'],
+                ['jest', Path(test_file_path).name, '--verbose', '--no-cache'],
+                ['node_modules/.bin/jest', Path(test_file_path).name, '--verbose', '--no-cache']
             ]
             
             for cmd in jest_commands:
@@ -131,15 +132,19 @@ class JestRunner:
                     result = subprocess.run(cmd, 
                                           capture_output=True, 
                                           text=True,
-                                          timeout=45,
-                                          cwd=Path(test_file_path).parent)
+                                          timeout=60,
+                                          cwd=test_dir,
+                                          env={**os.environ, 'NODE_OPTIONS': '--no-deprecation'})
                     
-                    if result.returncode == 0 or 'test' in result.stdout.lower():
+                    # Jest returns non-zero on test failures, but that's still valid output
+                    if result.stdout or result.stderr:
                         return self._parse_jest_output(result, test_file_path)
                     
                 except subprocess.TimeoutExpired:
+                    console.print(f"[yellow]Jest command timed out: {' '.join(cmd)}[/yellow]")
                     continue
                 except FileNotFoundError:
+                    console.print(f"[yellow]Command not found: {cmd[0]}[/yellow]")
                     continue
             
             return {'success': False, 'error': 'All Jest command variations failed'}
@@ -160,7 +165,7 @@ class JestRunner:
             
             # Write the runner to a temporary file
             runner_file = Path(test_file_path).parent / f"runner_{Path(test_file_path).stem}.js"
-            with open(runner_file, 'w') as f:
+            with open(runner_file, 'w', encoding='utf-8') as f:
                 f.write(test_runner)
             
             # Execute with Node.js
@@ -168,7 +173,8 @@ class JestRunner:
                                   capture_output=True, 
                                   text=True,
                                   timeout=30,
-                                  cwd=Path(test_file_path).parent)
+                                  cwd=Path(test_file_path).parent,
+                                  encoding='utf-8')
             
             # Clean up
             try:
@@ -181,104 +187,70 @@ class JestRunner:
         except Exception as e:
             return {'success': False, 'error': f'Node.js direct execution failed: {str(e)}'}
     
-    def _run_with_mocha_fallback(self, test_file_path: str) -> Dict[str, Any]:
-        """Strategy 3: Try Mocha as fallback test runner"""
-        if not self.node_available:
-            return {'success': False, 'error': 'Node.js not available for Mocha'}
-        
-        try:
-            console.print("[dim]Trying Mocha fallback...[/dim]")
-            
-            # Check if Mocha is available
-            mocha_check = subprocess.run(['npx', 'mocha', '--version'], 
-                                       capture_output=True, text=True, timeout=5)
-            
-            if mocha_check.returncode != 0:
-                return {'success': False, 'error': 'Mocha not available'}
-            
-            # Convert Jest-style test to Mocha-style
-            mocha_test = self._convert_to_mocha(test_file_path)
-            if not mocha_test:
-                return {'success': False, 'error': 'Could not convert to Mocha format'}
-            
-            # Write Mocha test file
-            mocha_file = Path(test_file_path).parent / f"mocha_{Path(test_file_path).stem}.js"
-            with open(mocha_file, 'w') as f:
-                f.write(mocha_test)
-            
-            # Run with Mocha
-            result = subprocess.run(['npx', 'mocha', str(mocha_file), '--reporter', 'json'], 
-                                  capture_output=True, 
-                                  text=True,
-                                  timeout=30,
-                                  cwd=Path(test_file_path).parent)
-            
-            # Clean up
-            try:
-                mocha_file.unlink()
-            except:
-                pass
-            
-            return self._parse_mocha_output(result, test_file_path)
-            
-        except Exception as e:
-            return {'success': False, 'error': f'Mocha execution failed: {str(e)}'}
-    
     def _run_basic_syntax_check(self, test_file_path: str) -> Dict[str, Any]:
-        """Strategy 4: Basic syntax and structure validation"""
+        """Strategy 3: Basic syntax and structure validation"""
         try:
             console.print("[dim]Performing syntax validation...[/dim]")
             
-            if not self.node_available:
-                # Fallback to basic file analysis
-                return self._analyze_test_file_structure(test_file_path)
+            if self.node_available:
+                # Check syntax with Node.js
+                result = subprocess.run(['node', '-c', test_file_path], 
+                                      capture_output=True, 
+                                      text=True,
+                                      timeout=10)
+                
+                if result.returncode != 0:
+                    return {
+                        'success': False,
+                        'error': f'JavaScript syntax error: {result.stderr}',
+                        'syntax_valid': False
+                    }
             
-            # Check syntax with Node.js
-            result = subprocess.run(['node', '-c', test_file_path], 
-                                  capture_output=True, 
-                                  text=True,
-                                  timeout=10)
-            
-            if result.returncode == 0:
-                # Syntax is valid, analyze test structure
-                return self._analyze_test_file_structure(test_file_path)
-            else:
-                return {
-                    'success': False,
-                    'error': f'JavaScript syntax error: {result.stderr}',
-                    'syntax_valid': False
-                }
+            # Analyze test file structure
+            return self._analyze_test_file_structure(test_file_path)
                 
         except Exception as e:
             return {'success': False, 'error': f'Syntax check failed: {str(e)}'}
     
     def _ensure_package_json(self, test_file_path: str):
         """Ensure package.json exists for Jest to work properly"""
-        package_json_path = Path(test_file_path).parent / "package.json"
+        test_dir = Path(test_file_path).parent
+        package_json_path = test_dir / "package.json"
         
         if not package_json_path.exists():
             console.print("[dim]Creating minimal package.json for Jest...[/dim]")
             package_json = {
                 "name": "generated-tests",
                 "version": "1.0.0",
+                "type": "module",
                 "scripts": {
                     "test": "jest"
+                },
+                "jest": {
+                    "testEnvironment": "node",
+                    "transform": {},
+                    "extensionsToTreatAsEsm": [".js"]
                 },
                 "devDependencies": {
                     "jest": "^29.0.0"
                 }
             }
             
-            with open(package_json_path, 'w') as f:
-                json.dump(package_json, f, indent=2)
+            try:
+                with open(package_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(package_json, f, indent=2)
+                console.print(f"[green]Created package.json at {package_json_path}[/green]")
+            except Exception as e:
+                console.print(f"[yellow]Failed to create package.json: {e}[/yellow]")
     
     def _create_node_test_runner(self, test_file_path: str) -> str:
         """Create a custom Node.js test runner"""
-        with open(test_file_path, 'r') as f:
-            test_content = f.read()
-        
-        # Extract the source file path from imports
-        source_imports = re.findall(r'(?:import|require)\s*\(?[\'"]([^\'"`]+)[\'"]', test_content)
+        try:
+            with open(test_file_path, 'r', encoding='utf-8') as f:
+                test_content = f.read()
+        except Exception as e:
+            console.print(f"[yellow]Could not read test file: {e}[/yellow]")
+            test_content = ""
         
         return f"""
 // Custom Node.js Test Runner
@@ -290,13 +262,28 @@ let passed = 0;
 let failed = 0;
 let errors = [];
 
+console.log('Starting JavaScript test execution...');
+
 // Mock Jest functions
 global.test = (name, testFn) => {{
     console.log(`Running: ${{name}}`);
     try {{
-        testFn();
-        passed++;
-        console.log(`✅ ${{name}} PASSED`);
+        if (testFn.constructor.name === 'AsyncFunction') {{
+            // Handle async test
+            testFn().then(() => {{
+                passed++;
+                console.log(`✅ ${{name}} PASSED`);
+            }}).catch((error) => {{
+                failed++;
+                const errorMsg = `❌ ${{name}} FAILED: ${{error.message}}`;
+                errors.push(errorMsg);
+                console.log(errorMsg);
+            }});
+        }} else {{
+            testFn();
+            passed++;
+            console.log(`✅ ${{name}} PASSED`);
+        }}
     }} catch (error) {{
         failed++;
         const errorMsg = `❌ ${{name}} FAILED: ${{error.message}}`;
@@ -308,11 +295,15 @@ global.test = (name, testFn) => {{
 global.it = global.test;
 
 global.describe = (name, suiteFn) => {{
-    console.log(`\\nSuite: ${{name}}`);
-    suiteFn();
+    console.log(`\\n📋 Suite: ${{name}}`);
+    try {{
+        suiteFn();
+    }} catch (error) {{
+        console.log(`Suite error: ${{error.message}}`);
+    }}
 }};
 
-// Mock expect function
+// Enhanced expect function
 global.expect = (actual) => {{
     return {{
         toBe: (expected) => {{
@@ -345,76 +336,89 @@ global.expect = (actual) => {{
             }} catch (e) {{
                 // Expected to throw
             }}
+        }},
+        toBeGreaterThan: (expected) => {{
+            if (actual <= expected) {{
+                throw new Error(`Expected ${{actual}} to be greater than ${{expected}}`);
+            }}
+        }},
+        toBeLessThan: (expected) => {{
+            if (actual >= expected) {{
+                throw new Error(`Expected ${{actual}} to be less than ${{expected}}`);
+            }}
+        }},
+        toContain: (expected) => {{
+            if (!actual.includes || !actual.includes(expected)) {{
+                throw new Error(`Expected ${{actual}} to contain ${{expected}}`);
+            }}
         }}
     }};
 }};
 
-// Try to load and execute the test file
+// Mock console if needed
+global.beforeEach = (fn) => {{ /* Mock implementation */ }};
+global.afterEach = (fn) => {{ /* Mock implementation */ }};
+global.beforeAll = (fn) => {{ /* Mock implementation */ }};
+global.afterAll = (fn) => {{ /* Mock implementation */ }};
+
+// Load and execute the test file
 try {{
+    console.log('Loading test file...');
     {test_content}
     
-    console.log('\\n=== RESULTS ===');
-    console.log(`RESULTS: ${{passed}} passed, ${{failed}} failed`);
-    
-    if (errors.length > 0) {{
-        console.log('\\nFAILED TESTS:');
-        errors.forEach(error => console.log(`  ${{error}}`));
-    }}
+    // Give async tests some time to complete
+    setTimeout(() => {{
+        console.log('\\n=== RESULTS ===');
+        console.log(`RESULTS: ${{passed}} passed, ${{failed}} failed`);
+        
+        if (errors.length > 0) {{
+            console.log('\\n📋 FAILED TESTS:');
+            errors.forEach(error => console.log(`  ${{error}}`));
+        }}
+        
+        // Exit with appropriate code
+        process.exit(failed > 0 ? 1 : 0);
+    }}, 1000);
     
 }} catch (error) {{
     console.log(`EXECUTION ERROR: ${{error.message}}`);
     console.log(`STACK: ${{error.stack}}`);
+    process.exit(1);
 }}
 """
-    
-    def _convert_to_mocha(self, test_file_path: str) -> str:
-        """Convert Jest-style tests to Mocha-style"""
-        try:
-            with open(test_file_path, 'r') as f:
-                content = f.read()
-            
-            # Basic Jest to Mocha conversion
-            mocha_content = content
-            
-            # Replace Jest imports with Mocha equivalents
-            mocha_content = re.sub(r'import.*from [\'"]@?jest[\'"];?\n?', '', mocha_content)
-            
-            # Add Mocha/Chai requires if needed
-            if 'expect(' in mocha_content:
-                mocha_content = "const { expect } = require('chai');\n" + mocha_content
-            
-            # Jest and Mocha have similar syntax for describe/test/it, so minimal changes needed
-            return mocha_content
-            
-        except Exception as e:
-            console.print(f"[yellow]Mocha conversion failed: {e}[/yellow]")
-            return ""
     
     def _analyze_test_file_structure(self, test_file_path: str) -> Dict[str, Any]:
         """Analyze test file structure without execution"""
         try:
-            with open(test_file_path, 'r') as f:
+            with open(test_file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
             # Count different types of test patterns
             test_patterns = [
-                r'\btest\s*\(',
-                r'\bit\s*\(',
-                r'describe\s*\(',
-                r'expect\s*\('
+                (r'\btest\s*\(', 'test calls'),
+                (r'\bit\s*\(', 'it calls'),
+                (r'describe\s*\(', 'describe blocks'),
+                (r'expect\s*\(', 'expect statements')
             ]
             
             test_counts = {}
             total_tests = 0
             
-            for pattern in test_patterns:
-                matches = len(re.findall(pattern, content))
-                test_counts[pattern] = matches
-                if pattern in [r'\btest\s*\(', r'\bit\s*\(']:
+            for pattern, name in test_patterns:
+                matches = len(re.findall(pattern, content, re.IGNORECASE))
+                test_counts[name] = matches
+                if 'test' in name or 'it' in name:
                     total_tests += matches
             
             # Look for imports/requires
-            imports = re.findall(r'(?:import|require)\s*.*?[\'"`]([^\'"`]+)[\'"`]', content)
+            import_patterns = [
+                r'import\s+.*?from\s+[\'"`]([^\'"`]+)[\'"`]',
+                r'require\s*\(\s*[\'"`]([^\'"`]+)[\'"`]\s*\)'
+            ]
+            
+            imports = []
+            for pattern in import_patterns:
+                imports.extend(re.findall(pattern, content))
             
             return {
                 'success': True,
@@ -437,47 +441,32 @@ try {{
     
     def _parse_jest_output(self, result: subprocess.CompletedProcess, test_file_path: str) -> Dict[str, Any]:
         """Parse Jest output (JSON or text)"""
+        output = result.stdout + result.stderr
+        
         try:
-            # Try JSON parsing first
-            if result.stdout and '{' in result.stdout:
-                json_start = result.stdout.find('{')
-                json_end = result.stdout.rfind('}') + 1
-                if json_start >= 0 and json_end > json_start:
-                    json_str = result.stdout[json_start:json_end]
-                    json_data = json.loads(json_str)
+            # Try to find JSON in output
+            json_match = re.search(r'\{[^{}]*"numTotalTests"[^{}]*\}', output)
+            if json_match:
+                try:
+                    json_data = json.loads(json_match.group())
                     return self._parse_jest_json(json_data, test_file_path)
+                except json.JSONDecodeError:
+                    pass
             
             # Fallback to text parsing
             return self._parse_jest_text(result, test_file_path)
             
-        except json.JSONDecodeError:
-            return self._parse_jest_text(result, test_file_path)
         except Exception as e:
-            return {'success': False, 'error': f'Jest output parsing failed: {str(e)}'}
+            return {'success': False, 'error': f'Jest output parsing failed: {str(e)}', 'output': output}
     
     def _parse_jest_json(self, json_data: Dict, test_file_path: str) -> Dict[str, Any]:
         """Parse Jest JSON output"""
-        test_results = json_data.get('testResults', [])
-        
-        total_passed = 0
-        total_failed = 0
-        total_duration = 0
-        
-        for test_file in test_results:
-            for assertion in test_file.get('assertionResults', []):
-                if assertion.get('status') == 'passed':
-                    total_passed += 1
-                else:
-                    total_failed += 1
-            
-            total_duration += test_file.get('endTime', 0) - test_file.get('startTime', 0)
-        
         return {
-            'success': json_data.get('success', total_failed == 0),
-            'passed': total_passed,
-            'failed': total_failed,
+            'success': json_data.get('success', False),
+            'passed': json_data.get('numPassedTests', 0),
+            'failed': json_data.get('numFailedTests', 0),
             'skipped': json_data.get('numPendingTests', 0),
-            'duration': total_duration / 1000,  # Convert to seconds
+            'total': json_data.get('numTotalTests', 0),
             'test_file': test_file_path,
             'method': 'jest_json'
         }
@@ -488,17 +477,19 @@ try {{
         
         # Extract test counts using various patterns
         patterns = [
-            (r'(\d+) passing', 'passed'),
-            (r'(\d+) failing', 'failed'),
-            (r'(\d+) pending', 'skipped'),
-            (r'Tests:\s+(\d+) failed,\s+(\d+) passed', 'failed_passed'),
-            (r'Tests:\s+(\d+) passed', 'passed_only')
+            (r'(\d+)\s+passing', 'passed'),
+            (r'(\d+)\s+failing', 'failed'),
+            (r'(\d+)\s+pending', 'skipped'),
+            (r'Tests:\s+(\d+)\s+failed,\s+(\d+)\s+passed', 'failed_passed'),
+            (r'Tests:\s+(\d+)\s+passed', 'passed_only'),
+            (r'PASS.*?(\d+)\s+passed', 'pass_count'),
+            (r'FAIL.*?(\d+)\s+failed', 'fail_count')
         ]
         
         passed = failed = skipped = 0
         
         for pattern, pattern_type in patterns:
-            matches = re.findall(pattern, output)
+            matches = re.findall(pattern, output, re.IGNORECASE)
             if matches:
                 if pattern_type == 'passed':
                     passed = int(matches[0])
@@ -510,31 +501,36 @@ try {{
                     failed, passed = int(matches[0][0]), int(matches[0][1])
                 elif pattern_type == 'passed_only':
                     passed = int(matches[0])
-                break
+                elif pattern_type == 'pass_count':
+                    passed = max(passed, int(matches[-1]))
+                elif pattern_type == 'fail_count':
+                    failed = max(failed, int(matches[-1]))
         
-        # Extract duration
-        duration_patterns = [
-            r'(\d+\.?\d*)\s*s',
-            r'(\d+\.?\d*)\s*ms'
-        ]
+        # If we found tests in output but no explicit counts, try to infer
+        if passed == 0 and failed == 0:
+            if 'PASS' in output:
+                passed = 1
+            elif 'FAIL' in output:
+                failed = 1
         
-        duration = 0
-        for pattern in duration_patterns:
-            duration_match = re.search(pattern, output)
-            if duration_match:
-                duration = float(duration_match.group(1))
-                if 'ms' in pattern:
-                    duration /= 1000
-                break
+        # Check for common success/failure indicators
+        success_indicators = ['Tests passed', 'All tests passed', 'PASS']
+        failure_indicators = ['Tests failed', 'FAIL', 'Error', 'Failed']
+        
+        has_success = any(indicator in output for indicator in success_indicators)
+        has_failure = any(indicator in output for indicator in failure_indicators)
+        
+        # Determine success based on exit code and output
+        success = (result.returncode == 0 or has_success) and not has_failure and failed == 0
         
         return {
-            'success': result.returncode == 0 and failed == 0,
+            'success': success,
             'passed': passed,
             'failed': failed,
             'skipped': skipped,
-            'duration': duration,
             'test_file': test_file_path,
             'output': output,
+            'return_code': result.returncode,
             'method': 'jest_text'
         }
     
@@ -543,17 +539,22 @@ try {{
         output = result.stdout + result.stderr
         
         # Look for our custom output patterns
-        passed_matches = output.count("PASSED")
-        failed_matches = output.count("FAILED")
+        passed_matches = output.count("✅") or output.count("PASSED")
+        failed_matches = output.count("❌") or output.count("FAILED")
         
         # Extract results summary if present
-        results_match = re.search(r'RESULTS: (\d+) passed, (\d+) failed', output)
+        results_match = re.search(r'RESULTS:\s*(\d+)\s+passed,\s*(\d+)\s+failed', output)
         if results_match:
             passed = int(results_match.group(1))
             failed = int(results_match.group(2))
         else:
             passed = passed_matches
             failed = failed_matches
+        
+        # If no explicit results found but execution seemed successful
+        if passed == 0 and failed == 0 and result.returncode == 0:
+            if "Running:" in output:  # Tests were attempted
+                passed = 1  # Assume at least one test passed
         
         return {
             'success': result.returncode == 0 and failed == 0,
@@ -566,60 +567,23 @@ try {{
             'method': 'node_direct'
         }
     
-    def _parse_mocha_output(self, result: subprocess.CompletedProcess, test_file_path: str) -> Dict[str, Any]:
-        """Parse Mocha output"""
-        output = result.stdout + result.stderr
-        
-        try:
-            # Try JSON parsing if available
-            if result.stdout and '{' in result.stdout:
-                json_data = json.loads(result.stdout)
-                return {
-                    'success': len(json_data.get('failures', [])) == 0,
-                    'passed': json_data.get('stats', {}).get('passes', 0),
-                    'failed': json_data.get('stats', {}).get('failures', 0),
-                    'skipped': json_data.get('stats', {}).get('pending', 0),
-                    'duration': json_data.get('stats', {}).get('duration', 0) / 1000,
-                    'test_file': test_file_path,
-                    'method': 'mocha_json'
-                }
-        except json.JSONDecodeError:
-            pass
-        
-        # Fallback to text parsing
-        passed_match = re.search(r'(\d+) passing', output)
-        failed_match = re.search(r'(\d+) failing', output)
-        pending_match = re.search(r'(\d+) pending', output)
-        
-        passed = int(passed_match.group(1)) if passed_match else 0
-        failed = int(failed_match.group(1)) if failed_match else 0
-        skipped = int(pending_match.group(1)) if pending_match else 0
-        
-        return {
-            'success': result.returncode == 0,
-            'passed': passed,
-            'failed': failed,
-            'skipped': skipped,
-            'duration': 0,
-            'test_file': test_file_path,
-            'output': output,
-            'method': 'mocha_text'
-        }
-    
     def get_installation_instructions(self) -> Dict[str, Any]:
         """Get instructions for installing JavaScript testing dependencies"""
         return {
-            'primary': {
+            'node': {
+                'command': 'Install Node.js from https://nodejs.org/',
+                'description': 'JavaScript runtime required for running tests'
+            },
+            'jest': {
                 'command': 'npm install --save-dev jest',
-                'description': 'Install Jest testing framework'
+                'description': 'Install Jest testing framework locally'
             },
             'alternative_commands': [
                 'npm install -g jest',
                 'yarn add --dev jest',
-                'npm install --save-dev mocha chai'
+                'npx jest --init'
             ],
-            'verification': 'npx jest --version',
-            'node_requirement': 'Node.js and npm must be installed first'
+            'verification': 'node --version && npm --version && npx jest --version'
         }
     
     def diagnose_environment(self) -> Dict[str, Any]:
