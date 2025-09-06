@@ -1,24 +1,13 @@
 {
   "service": "Testing",
-  "project_path": "E:\\Javascript",
-  "files_analyzed": 19,
-  "files_processed": 12,
-  "tests_generated": 123,
+  "project_path": "E:\\Javascript\\javascript.js",
+  "files_analyzed": 1,
+  "files_processed": 1,
+  "tests_generated": 6,
   "tests_passed": 0,
   "tests_failed": 0,
   "test_files": [
-    "tests\\generated\\javascript\\javascript.test.js",
-    "tests\\generated\\javascript\\index.test.js",
-    "tests\\generated\\javascript\\script.test.js",
-    "tests\\generated\\javascript\\pdfUtils.test.js",
-    "tests\\generated\\javascript\\server.test.js",
-    "tests\\generated\\javascript\\code.test.js",
-    "tests\\generated\\javascript\\server.test.js",
-    "tests\\generated\\javascript\\abbrev.test.js",
-    "tests\\generated\\javascript\\index.test.js",
-    "tests\\generated\\javascript\\index.test.js",
-    "tests\\generated\\javascript\\array-flatten.test.js",
-    "tests\\generated\\javascript\\index.test.js"
+    "tests\\generated\\javascript\\javascript.test.js"
   ],
   "status": "completed",
   "message": "Testing completed"

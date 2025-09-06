@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Enhanced Jest Runner - Executes JavaScript tests using Jest with multiple fallback strategies
+Fixed to handle proper project root detection when node_modules is outside code_assist folder
 """
 
 import subprocess
@@ -18,6 +19,12 @@ class JestRunner:
     
     def __init__(self):
         self.console = Console()
+        
+        # Find the project root (where package.json and node_modules exist)
+        self.project_root = self._find_project_root()
+        console.print(f"[dim]Project root detected: {self.project_root}[/dim]")
+        
+        # Check availability from project root context
         self.jest_available = self._check_jest_available()
         self.node_available = self._check_node_available()
         self.npm_available = self._check_npm_available()
@@ -29,9 +36,114 @@ class JestRunner:
             self._run_basic_syntax_check
         ]
     
+    def _find_project_root(self) -> Path:
+        """Find the project root directory containing package.json and node_modules"""
+        current_dir = Path.cwd()
+        console.print(f"[dim]Starting search from: {current_dir}[/dim]")
+        
+        # Look for package.json and node_modules in current dir and ALL parent directories
+        search_paths = [current_dir] + list(current_dir.parents)
+        
+        for path in search_paths:
+            package_json_path = path / 'package.json'
+            node_modules_path = path / 'node_modules'
+            
+            console.print(f"[dim]Checking: {path}[/dim]")
+            console.print(f"[dim]  package.json exists: {package_json_path.exists()}[/dim]")
+            console.print(f"[dim]  node_modules exists: {node_modules_path.exists()}[/dim]")
+            
+            if package_json_path.exists() and node_modules_path.exists():
+                console.print(f"[green]✅ Found project root with both package.json and node_modules: {path}[/green]")
+                return path
+            elif package_json_path.exists():
+                console.print(f"[yellow]Found package.json but no node_modules at: {path}[/yellow]")
+                # Continue searching, but remember this location
+                fallback_root = path
+        
+        # If we found package.json somewhere, use that
+        if 'fallback_root' in locals():
+            console.print(f"[yellow]Using fallback project root: {fallback_root}[/yellow]")
+            return fallback_root
+        
+        # If no package.json found anywhere, return current directory
+        console.print(f"[yellow]No project root found, using current directory: {current_dir}[/yellow]")
+        return current_dir
+    
+    def _check_jest_available(self) -> bool:
+        """Check Jest availability from project root"""
+        try:
+            # Check local node_modules from project root
+            jest_paths = [
+                self.project_root / 'node_modules' / '.bin' / 'jest',
+                self.project_root / 'node_modules' / '.bin' / 'jest.cmd',  # Windows
+                self.project_root / 'node_modules' / 'jest' / 'bin' / 'jest.js'
+            ]
+            
+            for jest_path in jest_paths:
+                if jest_path.exists():
+                    console.print(f"[green]✅ Jest found at: {jest_path}[/green]")
+                    return True
+            
+            # Check package.json for jest dependency
+            package_json = self.project_root / 'package.json'
+            if package_json.exists():
+                try:
+                    with open(package_json, 'r') as f:
+                        package_data = json.load(f)
+                        deps = {**package_data.get('dependencies', {}), 
+                               **package_data.get('devDependencies', {})}
+                        if 'jest' in deps:
+                            console.print(f"[green]✅ Jest in package.json: {deps['jest']}[/green]")
+                            return True
+                except Exception as e:
+                    console.print(f"[yellow]Could not read package.json: {e}[/yellow]")
+            
+            # Try npx from project root
+            result = subprocess.run(['npx', 'jest', '--version'], 
+                                  capture_output=True, text=True, timeout=10,
+                                  cwd=self.project_root, shell=True)
+            if result.returncode == 0:
+                console.print(f"[green]✅ Jest via npx: {result.stdout.strip()}[/green]")
+                return True
+            
+            console.print(f"[yellow]⚠️ Jest not available. Error: {result.stderr}[/yellow]")
+            return False
+            
+        except Exception as e:
+            console.print(f"[yellow]⚠️ Jest check failed: {e}[/yellow]")
+            return False
+    
+    def _check_node_available(self) -> bool:
+        """Check Node.js availability from project root"""
+        try:
+            result = subprocess.run(['node', '--version'], 
+                                  capture_output=True, text=True, timeout=5,
+                                  cwd=self.project_root, shell=True)
+            if result.returncode == 0:
+                console.print(f"[green]✅ Node.js: {result.stdout.strip()}[/green]")
+                return True
+            
+            console.print(f"[yellow]⚠️ Node.js not available: {result.stderr}[/yellow]")
+            return False
+            
+        except Exception as e:
+            console.print(f"[yellow]⚠️ Node.js check error: {e}[/yellow]")
+            return False
+    
+    def _check_npm_available(self) -> bool:
+        """Check if npm is available from project root"""
+        try:
+            result = subprocess.run(['npm', '--version'], 
+                                  capture_output=True, text=True, timeout=5,
+                                  cwd=self.project_root, shell=True)
+            return result.returncode == 0
+        except:
+            return False
+    
     def run_tests(self, test_file_path: str) -> Dict[str, Any]:
         """Execute tests using the best available method"""
         console.print(f"[cyan]🧪 Running JavaScript tests: {Path(test_file_path).name}[/cyan]")
+        console.print(f"[dim]Working from project root: {self.project_root}[/dim]")
         
         # Try each execution strategy in order
         for i, strategy in enumerate(self.execution_strategies):
@@ -56,125 +168,100 @@ class JestRunner:
             'strategies_attempted': len(self.execution_strategies),
             'jest_available': self.jest_available,
             'node_available': self.node_available,
-            'npm_available': self.npm_available
+            'npm_available': self.npm_available,
+            'project_root': str(self.project_root)
         }
     
-    def _check_jest_available(self) -> bool:
-        """Check if Jest is installed and available"""
-        try:
-            # Try npx jest first
-            result = subprocess.run(['npx', 'jest', '--version'], 
-                                  capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                console.print(f"[green]✅ Jest available via npx: {result.stdout.strip()}[/green]")
-                return True
-            
-            # Try global jest
-            result = subprocess.run(['jest', '--version'], 
-                                  capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                console.print(f"[green]✅ Jest available globally: {result.stdout.strip()}[/green]")
-                return True
-            
-            console.print("[yellow]⚠️ Jest not available[/yellow]")
-            return False
-        except Exception as e:
-            console.print(f"[yellow]⚠️ Could not check Jest: {e}[/yellow]")
-            return False
-    
-    def _check_node_available(self) -> bool:
-        """Check if Node.js is available"""
-        try:
-            result = subprocess.run(['node', '--version'], 
-                                  capture_output=True, text=True, timeout=5)
-            available = result.returncode == 0
-            if available:
-                console.print(f"[green]✅ Node.js available: {result.stdout.strip()}[/green]")
-            else:
-                console.print("[yellow]⚠️ Node.js not available[/yellow]")
-            return available
-        except Exception as e:
-            console.print(f"[yellow]⚠️ Could not check Node.js: {e}[/yellow]")
-            return False
-    
-    def _check_npm_available(self) -> bool:
-        """Check if npm is available"""
-        try:
-            result = subprocess.run(['npm', '--version'], 
-                                  capture_output=True, text=True, timeout=5)
-            return result.returncode == 0
-        except:
-            return False
-    
     def _run_with_jest(self, test_file_path: str) -> Dict[str, Any]:
-        """Strategy 1: Run with Jest (preferred method)"""
+        """Strategy 1: Run with Jest from project root (preferred method)"""
         if not self.jest_available or not self.node_available:
             return {'success': False, 'error': 'Jest or Node.js not available'}
         
         try:
-            # Ensure package.json exists for Jest
-            self._ensure_package_json(test_file_path)
+            # Get relative path from project root to test file
+            test_path = Path(test_file_path)
+            if test_path.is_absolute():
+                try:
+                    rel_test_path = test_path.relative_to(self.project_root)
+                except ValueError:
+                    # Test file is outside project root, use absolute path
+                    rel_test_path = test_path
+            else:
+                rel_test_path = test_path
             
-            test_dir = Path(test_file_path).parent
+            console.print(f"[dim]Running Jest from: {self.project_root}[/dim]")
+            console.print(f"[dim]Test file: {rel_test_path}[/dim]")
             
-            # Try different Jest command variations with better options
+            # Jest commands to try (from project root)
             jest_commands = [
-                ['npx', 'jest', Path(test_file_path).name, '--verbose', '--no-cache'],
-                ['npx', 'jest', test_file_path, '--verbose', '--no-cache'],
-                ['jest', Path(test_file_path).name, '--verbose', '--no-cache'],
-                ['node_modules/.bin/jest', Path(test_file_path).name, '--verbose', '--no-cache']
+                ['npx', 'jest', str(rel_test_path), '--verbose', '--forceExit'],
+                ['npm', 'test', '--', str(rel_test_path)],
+                ['node', 'node_modules/jest/bin/jest.js', str(rel_test_path), '--verbose'],
+                ['npx', 'jest', str(rel_test_path), '--no-cache', '--verbose'],
+                # Windows specific
+                ['node_modules\\.bin\\jest.cmd', str(rel_test_path), '--verbose']
             ]
             
             for cmd in jest_commands:
                 try:
-                    console.print(f"[dim]Running: {' '.join(cmd)}[/dim]")
+                    console.print(f"[dim]Trying: {' '.join(cmd)}[/dim]")
                     
-                    result = subprocess.run(cmd, 
-                                          capture_output=True, 
-                                          text=True,
-                                          timeout=60,
-                                          cwd=test_dir,
-                                          env={**os.environ, 'NODE_OPTIONS': '--no-deprecation'})
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=60,
+                        cwd=self.project_root,  # KEY: Run from project root!
+                        shell=True,
+                        env={**os.environ, 'NODE_OPTIONS': '--no-deprecation'}
+                    )
+                    
+                    console.print(f"[dim]Exit code: {result.returncode}[/dim]")
+                    if result.stdout:
+                        console.print(f"[dim]Stdout preview: {result.stdout[:200]}...[/dim]")
+                    if result.stderr:
+                        console.print(f"[dim]Stderr preview: {result.stderr[:200]}...[/dim]")
                     
                     # Jest returns non-zero on test failures, but that's still valid output
                     if result.stdout or result.stderr:
+                        console.print("[dim]Got Jest output, parsing...[/dim]")
                         return self._parse_jest_output(result, test_file_path)
-                    
+                        
                 except subprocess.TimeoutExpired:
-                    console.print(f"[yellow]Jest command timed out: {' '.join(cmd)}[/yellow]")
+                    console.print(f"[yellow]Command timeout: {' '.join(cmd)}[/yellow]")
                     continue
-                except FileNotFoundError:
-                    console.print(f"[yellow]Command not found: {cmd[0]}[/yellow]")
+                except Exception as e:
+                    console.print(f"[yellow]Command error: {e}[/yellow]")
                     continue
             
-            return {'success': False, 'error': 'All Jest command variations failed'}
+            return {'success': False, 'error': 'All Jest execution attempts failed'}
             
         except Exception as e:
-            return {'success': False, 'error': f'Jest execution failed: {str(e)}'}
+            return {'success': False, 'error': f'Jest execution error: {str(e)}'}
     
     def _run_with_node_direct(self, test_file_path: str) -> Dict[str, Any]:
-        """Strategy 2: Run with Node.js directly using custom test framework"""
+        """Strategy 2: Run with Node.js directly from project root using custom test framework"""
         if not self.node_available:
             return {'success': False, 'error': 'Node.js not available'}
         
         try:
-            console.print("[dim]Trying Node.js direct execution...[/dim]")
+            console.print("[dim]Trying Node.js direct execution from project root...[/dim]")
             
             # Create a custom test runner
             test_runner = self._create_node_test_runner(test_file_path)
             
-            # Write the runner to a temporary file
-            runner_file = Path(test_file_path).parent / f"runner_{Path(test_file_path).stem}.js"
+            # Write the runner to project root (where node_modules is)
+            runner_file = self.project_root / f"temp_runner_{Path(test_file_path).stem}.js"
             with open(runner_file, 'w', encoding='utf-8') as f:
                 f.write(test_runner)
             
-            # Execute with Node.js
-            result = subprocess.run(['node', str(runner_file)], 
+            # Execute from project root
+            result = subprocess.run(['node', str(runner_file.name)], 
                                   capture_output=True, 
                                   text=True,
                                   timeout=30,
-                                  cwd=Path(test_file_path).parent,
-                                  encoding='utf-8')
+                                  cwd=self.project_root,  # KEY: Run from project root!
+                                  shell=True)
             
             # Clean up
             try:
@@ -185,7 +272,7 @@ class JestRunner:
             return self._parse_node_direct_output(result, test_file_path)
             
         except Exception as e:
-            return {'success': False, 'error': f'Node.js direct execution failed: {str(e)}'}
+            return {'success': False, 'error': f'Node.js execution error: {str(e)}'}
     
     def _run_basic_syntax_check(self, test_file_path: str) -> Dict[str, Any]:
         """Strategy 3: Basic syntax and structure validation"""
@@ -193,11 +280,13 @@ class JestRunner:
             console.print("[dim]Performing syntax validation...[/dim]")
             
             if self.node_available:
-                # Check syntax with Node.js
+                # Check syntax with Node.js from project root
                 result = subprocess.run(['node', '-c', test_file_path], 
                                       capture_output=True, 
                                       text=True,
-                                      timeout=10)
+                                      timeout=10,
+                                      cwd=self.project_root,
+                                      shell=True)
                 
                 if result.returncode != 0:
                     return {
@@ -214,8 +303,8 @@ class JestRunner:
     
     def _ensure_package_json(self, test_file_path: str):
         """Ensure package.json exists for Jest to work properly"""
-        test_dir = Path(test_file_path).parent
-        package_json_path = test_dir / "package.json"
+        # Use project root for package.json, not test file directory
+        package_json_path = self.project_root / "package.json"
         
         if not package_json_path.exists():
             console.print("[dim]Creating minimal package.json for Jest...[/dim]")
@@ -252,8 +341,18 @@ class JestRunner:
             console.print(f"[yellow]Could not read test file: {e}[/yellow]")
             test_content = ""
         
+        # Make the test file path relative to project root for proper require/import
+        test_path = Path(test_file_path)
+        if test_path.is_absolute():
+            try:
+                relative_test_path = test_path.relative_to(self.project_root)
+            except ValueError:
+                relative_test_path = test_path
+        else:
+            relative_test_path = test_path
+        
         return f"""
-// Custom Node.js Test Runner
+// Custom Node.js Test Runner (executed from project root)
 const fs = require('fs');
 const path = require('path');
 
@@ -263,6 +362,8 @@ let failed = 0;
 let errors = [];
 
 console.log('Starting JavaScript test execution...');
+console.log('Working directory:', process.cwd());
+console.log('Test file path:', '{relative_test_path}');
 
 // Mock Jest functions
 global.test = (name, testFn) => {{
@@ -395,10 +496,10 @@ try {{
             
             # Count different types of test patterns
             test_patterns = [
-                (r'\btest\s*\(', 'test calls'),
-                (r'\bit\s*\(', 'it calls'),
-                (r'describe\s*\(', 'describe blocks'),
-                (r'expect\s*\(', 'expect statements')
+                (r'\\btest\\s*\\(', 'test calls'),
+                (r'\\bit\\s*\\(', 'it calls'),
+                (r'describe\\s*\\(', 'describe blocks'),
+                (r'expect\\s*\\(', 'expect statements')
             ]
             
             test_counts = {}
@@ -412,8 +513,8 @@ try {{
             
             # Look for imports/requires
             import_patterns = [
-                r'import\s+.*?from\s+[\'"`]([^\'"`]+)[\'"`]',
-                r'require\s*\(\s*[\'"`]([^\'"`]+)[\'"`]\s*\)'
+                r'import\\s+.*?from\\s+[\\\'"`]([^\\\'"`]+)[\\\'"`]',
+                r'require\\s*\\(\\s*[\\\'"`]([^\\\'"`]+)[\\\'"`]\\s*\\)'
             ]
             
             imports = []
@@ -430,6 +531,7 @@ try {{
                 'method': 'structure_analysis',
                 'patterns_found': test_counts,
                 'imports_found': imports,
+                'project_root': str(self.project_root),
                 'message': f'Structure valid. Found {total_tests} potential test functions.'
             }
             
@@ -445,7 +547,7 @@ try {{
         
         try:
             # Try to find JSON in output
-            json_match = re.search(r'\{[^{}]*"numTotalTests"[^{}]*\}', output)
+            json_match = re.search(r'\\{[^{}]*"numTotalTests"[^{}]*\\}', output)
             if json_match:
                 try:
                     json_data = json.loads(json_match.group())
@@ -468,7 +570,8 @@ try {{
             'skipped': json_data.get('numPendingTests', 0),
             'total': json_data.get('numTotalTests', 0),
             'test_file': test_file_path,
-            'method': 'jest_json'
+            'method': 'jest_json',
+            'project_root': str(self.project_root)
         }
     
     def _parse_jest_text(self, result: subprocess.CompletedProcess, test_file_path: str) -> Dict[str, Any]:
@@ -477,13 +580,13 @@ try {{
         
         # Extract test counts using various patterns
         patterns = [
-            (r'(\d+)\s+passing', 'passed'),
-            (r'(\d+)\s+failing', 'failed'),
-            (r'(\d+)\s+pending', 'skipped'),
-            (r'Tests:\s+(\d+)\s+failed,\s+(\d+)\s+passed', 'failed_passed'),
-            (r'Tests:\s+(\d+)\s+passed', 'passed_only'),
-            (r'PASS.*?(\d+)\s+passed', 'pass_count'),
-            (r'FAIL.*?(\d+)\s+failed', 'fail_count')
+            (r'(\\d+)\\s+passing', 'passed'),
+            (r'(\\d+)\\s+failing', 'failed'),
+            (r'(\\d+)\\s+pending', 'skipped'),
+            (r'Tests:\\s+(\\d+)\\s+failed,\\s+(\\d+)\\s+passed', 'failed_passed'),
+            (r'Tests:\\s+(\\d+)\\s+passed', 'passed_only'),
+            (r'PASS.*?(\\d+)\\s+passed', 'pass_count'),
+            (r'FAIL.*?(\\d+)\\s+failed', 'fail_count')
         ]
         
         passed = failed = skipped = 0
@@ -531,7 +634,8 @@ try {{
             'test_file': test_file_path,
             'output': output,
             'return_code': result.returncode,
-            'method': 'jest_text'
+            'method': 'jest_text',
+            'project_root': str(self.project_root)
         }
     
     def _parse_node_direct_output(self, result: subprocess.CompletedProcess, test_file_path: str) -> Dict[str, Any]:
@@ -543,7 +647,7 @@ try {{
         failed_matches = output.count("❌") or output.count("FAILED")
         
         # Extract results summary if present
-        results_match = re.search(r'RESULTS:\s*(\d+)\s+passed,\s*(\d+)\s+failed', output)
+        results_match = re.search(r'RESULTS:\\s*(\\d+)\\s+passed,\\s*(\\d+)\\s+failed', output)
         if results_match:
             passed = int(results_match.group(1))
             failed = int(results_match.group(2))
@@ -564,7 +668,8 @@ try {{
             'duration': 0,
             'test_file': test_file_path,
             'output': output,
-            'method': 'node_direct'
+            'method': 'node_direct',
+            'project_root': str(self.project_root)
         }
     
     def get_installation_instructions(self) -> Dict[str, Any]:
@@ -583,7 +688,8 @@ try {{
                 'yarn add --dev jest',
                 'npx jest --init'
             ],
-            'verification': 'node --version && npm --version && npx jest --version'
+            'verification': 'node --version && npm --version && npx jest --version',
+            'project_root': str(self.project_root)
         }
     
     def diagnose_environment(self) -> Dict[str, Any]:
@@ -592,6 +698,8 @@ try {{
             'node_available': self.node_available,
             'npm_available': self.npm_available,
             'jest_available': self.jest_available,
+            'project_root': str(self.project_root),
+            'working_directory': str(Path.cwd()),
             'recommendations': []
         }
         
@@ -604,13 +712,18 @@ try {{
         if not self.jest_available:
             diagnosis['recommendations'].append('Install Jest: npm install --save-dev jest')
         
-        # Check for package.json
+        # Check for package.json in project root
         try:
-            package_json_exists = os.path.exists('package.json')
-            diagnosis['package_json_exists'] = package_json_exists
-            if not package_json_exists:
+            package_json_path = self.project_root / 'package.json'
+            node_modules_path = self.project_root / 'node_modules'
+            
+            diagnosis['package_json_exists'] = package_json_path.exists()
+            diagnosis['node_modules_exists'] = node_modules_path.exists()
+            
+            if not package_json_path.exists():
                 diagnosis['recommendations'].append('Create package.json: npm init -y')
-        except:
-            pass
-        
-        return diagnosis
+            
+            if not node_modules_path.exists():
+                diagnosis['recommendations'].append('Install dependencies: npm install')
+        except Exception as e:
+            diagnosis['error'] = f'Error checking package.json or node_modules: {e}'
