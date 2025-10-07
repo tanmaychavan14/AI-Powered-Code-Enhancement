@@ -1,13 +1,13 @@
 {
   "service": "Testing",
-  "project_path": "E:\\Javascript\\javascript.js",
+  "project_path": "E:\\Python\\python project\\imgSteg.py",
   "files_analyzed": 1,
   "files_processed": 1,
-  "tests_generated": 6,
-  "tests_passed": 0,
+  "tests_generated": 17,
+  "tests_passed": 17,
   "tests_failed": 0,
   "test_files": [
-    "tests\\generated\\javascript\\javascript.test.js"
+    "tests\\generated\\python\\test_imgSteg.py"
   ],
   "status": "completed",
   "message": "Testing completed"

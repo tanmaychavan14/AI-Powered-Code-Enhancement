@@ -11,12 +11,12 @@ describe('multiply', () => {
     expect(multiply(-5, -3)).toBe(15);
   });
 
-  it('should return 0 when multiplying by 0', () => {
+  it('should multiply a number by zero correctly', () => {
     expect(multiply(5, 0)).toBe(0);
   });
 
-  it('should handle large numbers correctly', () => {
-    expect(multiply(1000000, 1000000)).toBe(1000000000000);
+  it('should multiply zero by a number correctly', () => {
+    expect(multiply(0, 5)).toBe(0);
   });
 });
 
@@ -40,12 +40,8 @@ describe('Calculator', () => {
       expect(calculator.add(-5, -3)).toBe(-8);
     });
 
-    it('should add zero to a number correctly', () => {
+    it('should add a number and zero correctly', () => {
       expect(calculator.add(5, 0)).toBe(5);
-    });
-
-    it('should handle adding large numbers correctly', () => {
-      expect(calculator.add(1000000, 1000000)).toBe(2000000);
     });
   });
 
@@ -62,12 +58,8 @@ describe('Calculator', () => {
       expect(calculator.subtract(-5, -3)).toBe(-2);
     });
 
-    it('should subtract zero from a number correctly', () => {
+    it('should subtract a number and zero correctly', () => {
       expect(calculator.subtract(5, 0)).toBe(5);
-    });
-
-    it('should handle subtracting large numbers correctly', () => {
-      expect(calculator.subtract(1000000, 100000)).toBe(900000);
     });
   });
 
@@ -86,10 +78,6 @@ describe('Calculator', () => {
 
     it('should square a decimal number correctly', () => {
       expect(calculator.square(2.5)).toBe(6.25);
-    });
-
-    it('should handle squaring a large number correctly', () => {
-      expect(calculator.square(1000)).toBe(1000000);
     });
   });
 });

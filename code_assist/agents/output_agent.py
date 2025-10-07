@@ -130,18 +130,57 @@ class OutputAgent:
         passed = results.get('tests_passed', 0)
         failed = results.get('tests_failed', 0)
         generated = results.get('tests_generated', 0)
+        functions_tested = results.get('functions_tested', 0)  # ✅ New
+        classes_tested = results.get('classes_tested', 0)      # ✅ New
         total_executed = passed + failed
         
         # Create statistics table
         stats_table = Table(title="📊 Test Statistics", border_style="green")
-        stats_table.add_column("Metric", style="cyan", width=25)
+        stats_table.add_column("Metric", style="cyan", width=30)
         stats_table.add_column("Count", style="white", width=10, justify="right")
-        stats_table.add_column("Status", style="green", width=15)
+        stats_table.add_column("Details", style="dim", width=25)
         
-        stats_table.add_row("Tests Generated", str(generated), "✅ Complete")
-        stats_table.add_row("Tests Executed", str(total_executed), "✅ Complete")
-        stats_table.add_row("Tests Passed", str(passed), "✅ Success" if passed > 0 else "⚠️  None")
-        stats_table.add_row("Tests Failed", str(failed), "❌ Failed" if failed > 0 else "✅ None")
+        # ✅ Show source code metrics
+        stats_table.add_row(
+            "Functions Analyzed", 
+            str(functions_tested), 
+            "in source code"
+        )
+        stats_table.add_row(
+            "Classes Analyzed", 
+            str(classes_tested), 
+            "in source code"
+        )
+        
+        # Separator
+        stats_table.add_row("", "", "")
+        
+        # ✅ Show generated test metrics
+        stats_table.add_row(
+            "Test Cases Generated", 
+            str(generated), 
+            f"~{generated // max(functions_tested + classes_tested, 1)} per function" if functions_tested + classes_tested > 0 else ""
+        )
+        stats_table.add_row(
+            "Test Cases Executed", 
+            str(total_executed), 
+            "✅ Complete"
+        )
+        
+        # Separator
+        stats_table.add_row("", "", "")
+        
+        # ✅ Show execution results
+        stats_table.add_row(
+            "Tests Passed", 
+            str(passed), 
+            "✅ Success" if passed > 0 else "⚠️  None"
+        )
+        stats_table.add_row(
+            "Tests Failed", 
+            str(failed), 
+            "❌ Failed" if failed > 0 else "✅ None"
+        )
         
         # Calculate success rate
         if total_executed > 0:
@@ -151,6 +190,26 @@ class OutputAgent:
         
         self.console.print(stats_table)
         self.console.print()
+        
+        # ✅ Add visual summary panel
+        if functions_tested > 0 or classes_tested > 0:
+            summary_text = f"""
+[bold cyan]📈 Coverage Summary[/bold cyan]
+
+• Analyzed [yellow]{functions_tested} function(s)[/yellow] + [yellow]{classes_tested} class(es)[/yellow]
+• Generated [green]{generated} test case(s)[/green]
+• Average: [blue]~{generated // max(functions_tested + classes_tested, 1)} tests per component[/blue]
+• Success Rate: [{"green" if (passed / max(total_executed, 1) * 100) >= 80 else "yellow"}]{(passed / max(total_executed, 1) * 100):.1f}%[/]
+            """
+            
+            summary_panel = Panel(
+                summary_text.strip(),
+                title="[bold blue]Test Coverage Overview[/bold blue]",
+                border_style="blue",
+                padding=(1, 2)
+            )
+            self.console.print(summary_panel)
+            self.console.print()
     
     def _display_test_files(self, results: Dict[str, Any]) -> None:
         """Display generated test files"""

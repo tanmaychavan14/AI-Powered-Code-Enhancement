@@ -1180,10 +1180,17 @@ class TestAgent:
             # Save test file
             test_file_path = self._save_test_file(test_code, file_path, language)
             
+            # ✅ FIX: Count actual test cases in the generated code
+            actual_test_count = self._count_actual_tests(test_code, language)
+            functions_count = len(test_targets['functions'])
+            classes_count = len(test_targets['classes'])
+            
             return {
                 'success': True,
                 'test_file': str(test_file_path),
-                'test_count': len(test_targets['classes']) + len(test_targets['functions'])
+                'test_count': actual_test_count,  # ✅ Actual test cases generated
+                'functions_tested': functions_count,  # ✅ Number of functions being tested
+                'classes_tested': classes_count  # ✅ Number of classes being tested
             }
             
         except Exception as e:
@@ -1191,6 +1198,32 @@ class TestAgent:
                 'success': False,
                 'error': str(e)
             }
+
+    def _count_actual_tests(self, test_code: str, language: str) -> int:
+        """Count the actual number of test cases in generated code"""
+        count = 0
+        
+        try:
+            if language == 'python':
+                # Count test functions (def test_...)
+                count = len(re.findall(r'^\s*def\s+test_\w+', test_code, re.MULTILINE))
+                
+            elif language == 'javascript':
+                # Count test() or it() calls
+                count = len(re.findall(r'\b(?:test|it)\s*\(', test_code))
+                
+            elif language == 'java':
+                # Count @Test annotations
+                count = len(re.findall(r'@Test', test_code))
+            
+            console.print(f"[dim]Counted {count} actual test cases in generated code[/dim]")
+            
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not count tests accurately: {e}[/yellow]")
+            # Fallback to a rough estimate
+            count = test_code.count('assert') + test_code.count('expect(') + test_code.count('assertEquals')
+        
+        return max(count, 1)  # Return at least 1 if code was generated
     
     def _generate_test_code_with_enhanced_llm(self, file_data: Dict[str, Any], test_targets: Dict[str, Any]) -> Optional[str]:
         """Generate test code using LLM with enhanced analysis and validation"""
