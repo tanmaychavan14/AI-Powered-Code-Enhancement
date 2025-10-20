@@ -9,7 +9,7 @@ import re
 import sys
 import importlib.util
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List  # ← MAKE SURE THIS IS HERE
 from rich.console import Console
 
 console = Console()
@@ -19,6 +19,9 @@ class PytestRunner:
     
     def __init__(self):
         self.console = Console()
+        # Add diagnostic
+        self.console.print(f"[cyan]Using Python: {sys.executable}[/cyan]")
+        
         self.pytest_available = self._check_pytest_available()
         self.execution_strategies = [
             self._run_with_pytest,
@@ -57,20 +60,38 @@ class PytestRunner:
     def _check_pytest_available(self) -> bool:
         """Check if pytest is installed and available"""
         try:
-            result = subprocess.run(['python', '-m', 'pytest', '--version'], 
-                                  capture_output=True, text=True, timeout=5)
+            # USE sys.executable instead of 'python'
+            result = subprocess.run(
+                [sys.executable, '-m', 'pytest', '--version'], 
+                capture_output=True, 
+                text=True, 
+                timeout=5
+            )
             available = result.returncode == 0
+            
             if available:
-                console.print("[green]✅ pytest is available[/green]")
+                version_output = result.stdout + result.stderr
+                console.print(f"[green]✅ pytest is available: {version_output.strip()}[/green]")
             else:
-                console.print("[yellow]⚠️ pytest not available[/yellow]")
+                console.print("[yellow]⚠️ pytest not available (command failed)[/yellow]")
+                console.print(f"[dim]Return code: {result.returncode}[/dim]")
+                console.print(f"[dim]Error: {result.stderr}[/dim]")
+            
             return available
+            
+        except FileNotFoundError:
+            console.print(f"[red]❌ Python executable not found: {sys.executable}[/red]")
+            return False
+        except subprocess.TimeoutExpired:
+            console.print("[yellow]⚠️ pytest check timed out[/yellow]")
+            return False
         except Exception as e:
             console.print(f"[yellow]⚠️ Could not check pytest: {e}[/yellow]")
+            console.print(f"[dim]Python executable: {sys.executable}[/dim]")
             return False
     
     def _run_with_pytest(self, test_file_path: str) -> Dict[str, Any]:
-        """Strategy 1: Run with pytest (preferred method)"""
+   
         if not self.pytest_available:
             return {'success': False, 'error': 'pytest not available'}
         
@@ -80,33 +101,57 @@ class PytestRunner:
             
             # Run pytest with comprehensive options
             cmd = [
-                'python', '-m', 'pytest', 
+                sys.executable,
+                '-m', 
+                'pytest', 
                 str(test_file_path),
                 '-v',
-                '--tb=short',
-                '--json-report',
-                f'--json-report-file={json_report_path}'
+                '--tb=short'
             ]
+            
+            # Only add JSON reporting if pytest-json-report is installed
+            try:
+                import pytest_jsonreport
+                cmd.extend(['--json-report', f'--json-report-file={json_report_path}'])
+                using_json = True
+                console.print("[dim]Using JSON report format[/dim]")
+            except ImportError:
+                using_json = False
+                console.print("[dim]pytest-json-report not available, using text parsing[/dim]")
             
             console.print(f"[dim]Running: {' '.join(cmd)}[/dim]")
             
-            result = subprocess.run(cmd, 
-                                  capture_output=True, 
-                                  text=True,
-                                  timeout=30)
+            result = subprocess.run(
+                cmd, 
+                capture_output=True, 
+                text=True,
+                timeout=30
+            )
             
-            # Parse results
-            if json_report_path.exists():
+            # Try JSON parsing first if available
+            if using_json and json_report_path.exists():
                 try:
                     with open(json_report_path, 'r') as f:
                         json_data = json.load(f)
                     json_report_path.unlink()  # Clean up
-                    return self._parse_json_report(json_data, test_file_path)
+                    
+                    parsed_result = self._parse_json_report(json_data, test_file_path)
+                    
+                    # Log the results for debugging
+                    console.print(f"[green]✅ Parsed from JSON: {parsed_result['passed']} passed, {parsed_result['failed']} failed[/green]")
+                    
+                    return parsed_result
                 except Exception as e:
                     console.print(f"[yellow]JSON parsing failed: {e}[/yellow]")
+                    # Fall through to text parsing
             
             # Fallback to text parsing
-            return self._parse_pytest_text_output(result, test_file_path)
+            parsed_result = self._parse_pytest_text_output(result, test_file_path)
+            
+            # Log the results for debugging
+            console.print(f"[green]✅ Parsed from text: {parsed_result['passed']} passed, {parsed_result['failed']} failed[/green]")
+            
+            return parsed_result
             
         except subprocess.TimeoutExpired:
             return {
@@ -116,11 +161,15 @@ class PytestRunner:
                 'failed': 0
             }
         except Exception as e:
+            console.print(f"[red]Pytest execution error: {str(e)}[/red]")
+            import traceback
+            console.print(f"[dim]{traceback.format_exc()}[/dim]")
             return {
                 'success': False,
-                'error': f'pytest execution failed: {str(e)}'
+                'error': f'pytest execution failed: {str(e)}',
+                'passed': 0,
+                'failed': 0
             }
-    
     def _run_with_unittest(self, test_file_path: str) -> Dict[str, Any]:
         """Strategy 2: Run with Python's built-in unittest"""
         try:
@@ -136,9 +185,11 @@ class PytestRunner:
             with open(unittest_file, 'w') as f:
                 f.write(test_content)
             
-            # Run with unittest
+            # Run with unittest - USE sys.executable
             result = subprocess.run([
-                'python', '-m', 'unittest', 
+                sys.executable,  # ← CHANGED FROM 'python'
+                '-m', 
+                'unittest', 
                 f"unittest_{Path(test_file_path).stem}.py",
                 '-v'
             ], 
@@ -149,11 +200,14 @@ class PytestRunner:
             )
             
             # Clean up
-            unittest_file.unlink()
+            if unittest_file.exists():
+                unittest_file.unlink()
             
             return self._parse_unittest_output(result, test_file_path)
             
         except Exception as e:
+            if 'unittest_file' in locals() and unittest_file.exists():
+                unittest_file.unlink()
             return {
                 'success': False,
                 'error': f'unittest execution failed: {str(e)}'
@@ -171,9 +225,11 @@ class PytestRunner:
             # Create a wrapper script that executes tests
             wrapper_script = self._create_test_wrapper(test_content, test_file_path)
             
-            # Execute the wrapper
+            # Execute the wrapper - USE sys.executable
             result = subprocess.run([
-                'python', '-c', wrapper_script
+                sys.executable,  # ← CHANGED FROM 'python'
+                '-c', 
+                wrapper_script
             ], 
             capture_output=True, 
             text=True,
@@ -193,9 +249,12 @@ class PytestRunner:
         try:
             console.print("[dim]Performing syntax validation...[/dim]")
             
-            # Check syntax
+            # Check syntax - USE sys.executable
             result = subprocess.run([
-                'python', '-m', 'py_compile', test_file_path
+                sys.executable,  # ← CHANGED FROM 'python'
+                '-m', 
+                'py_compile', 
+                test_file_path
             ], 
             capture_output=True, 
             text=True,
@@ -233,13 +292,12 @@ class PytestRunner:
             }
     
     def _read_and_convert_to_unittest(self, test_file_path: str) -> str:
-        """Convert pytest-style tests to unittest format"""
+        """Read test file and convert pytest syntax to unittest"""
         try:
             with open(test_file_path, 'r') as f:
                 content = f.read()
             
-            # Basic conversion from pytest to unittest
-            # This is a simplified conversion
+            # Basic pytest to unittest conversion
             unittest_content = """import unittest
 import sys
 from pathlib import Path
@@ -249,45 +307,61 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 """
             
-            # Extract imports from original file
-            import_lines = [line for line in content.split('\n') if line.strip().startswith('import') or line.strip().startswith('from')]
+            # Extract imports (excluding pytest-specific ones)
+            import_lines = []
+            for line in content.split('\n'):
+                if line.strip().startswith(('import ', 'from ')) and 'pytest' not in line:
+                    import_lines.append(line)
+            
             unittest_content += '\n'.join(import_lines) + '\n\n'
             
-            # Create unittest class
+            # Create test class
             class_name = f"Test{Path(test_file_path).stem.replace('test_', '').title()}"
-            unittest_content += f"class {class_name}(unittest.TestCase):\n"
+            unittest_content += f"class {class_name}(unittest.TestCase):\n\n"
             
             # Convert test functions
-            test_functions = re.findall(r'def (test_\w+.*?)(?=def|\Z)', content, re.DOTALL)
+            test_functions = re.findall(r'def (test_\w+.*?)(?=def test_|\Z)', content, re.DOTALL)
             
             for func_match in test_functions:
-                # Replace assert statements with unittest assertions
+                # Convert pytest assertions to unittest
                 func_content = func_match
-                func_content = re.sub(r'assert ([^,]+) == ([^,\n]+)', r'self.assertEqual(\1, \2)', func_content)
-                func_content = re.sub(r'assert ([^,\n]+)', r'self.assertTrue(\1)', func_content)
-                func_content = re.sub(r'pytest\.raises\(([^)]+)\)', r'self.assertRaises(\1)', func_content)
                 
-                # Add proper indentation
+                # Basic assertion conversions
+                func_content = re.sub(r'assert ([^=]+) == ([^,\n]+)', r'self.assertEqual(\1, \2)', func_content)
+                func_content = re.sub(r'assert ([^,\n]+)', r'self.assertTrue(\1)', func_content)
+                func_content = re.sub(r'with pytest\.raises\(([^)]+)\):', r'with self.assertRaises(\1):', func_content)
+                
+                # Add proper indentation (unittest methods need 4 extra spaces)
                 func_lines = func_content.split('\n')
-                indented_lines = ['    ' + line if line.strip() else line for line in func_lines]
+                indented_lines = []
+                for line in func_lines:
+                    if line.strip():
+                        indented_lines.append('    ' + line)
+                    else:
+                        indented_lines.append(line)
+                
                 unittest_content += '\n'.join(indented_lines) + '\n\n'
             
             unittest_content += """
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(verbosity=2)
 """
             
             return unittest_content
             
         except Exception as e:
-            console.print(f"[yellow]Conversion to unittest failed: {e}[/yellow]")
+            console.print(f"[yellow]Conversion failed: {e}[/yellow]")
             return ""
     
     def _create_test_wrapper(self, test_content: str, test_file_path: str) -> str:
         """Create a wrapper script for direct test execution"""
+        # Escape the test content properly
+        escaped_content = test_content.replace('\\', '\\\\').replace("'''", "\\'\\'\\'")
+        
         return f"""
 import sys
 import traceback
+import re
 from pathlib import Path
 
 # Add source directory to path
@@ -300,15 +374,20 @@ passed = 0
 failed = 0
 errors = []
 
-# Execute the test file content
+print("Starting direct test execution...")
+
+# Import the test content
+test_globals = {{}}
+test_locals = {{}}
+
 try:
-    exec('''{test_content}''')
+    # Execute the test file to define functions
+    exec('''
+{escaped_content}
+''', test_globals, test_locals)
     
     # Find and execute test functions
-    import inspect
-    current_module = sys.modules[__name__]
-    
-    for name, obj in inspect.getmembers(current_module):
+    for name, obj in test_locals.items():
         if name.startswith('test_') and callable(obj):
             try:
                 print(f"Running {{name}}...")
@@ -317,77 +396,81 @@ try:
                 print(f"✅ {{name}} PASSED")
             except Exception as e:
                 failed += 1
-                errors.append(f"❌ {{name}} FAILED: {{str(e)}}")
-                print(f"❌ {{name}} FAILED: {{str(e)}}")
+                error_msg = f"❌ {{name}} FAILED: {{str(e)}}"
+                errors.append(error_msg)
+                print(error_msg)
+                print(f"   Traceback: {{traceback.format_exc().split(chr(10))[-3]}}")
     
-    print(f"\\nRESULTS: {{passed}} passed, {{failed}} failed")
+    print(f"\\n=== RESULTS ===")
+    print(f"RESULTS: {{passed}} passed, {{failed}} failed")
     if errors:
-        print("\\nERRORS:")
+        print("\\nFAILED TESTS:")
         for error in errors:
-            print(error)
+            print(f"  {{error}}")
             
 except Exception as e:
     print(f"EXECUTION ERROR: {{str(e)}}")
-    print(traceback.format_exc())
+    print(f"TRACEBACK: {{traceback.format_exc()}}")
     failed = 1
 """
     
     def _parse_json_report(self, json_data: Dict, test_file_path: str) -> Dict[str, Any]:
-        """Parse pytest JSON report"""
+        """Parse pytest JSON report - ENHANCED VERSION"""
+        
+        console.print("[dim]Parsing JSON report...[/dim]")
+        
+        # Different versions of pytest-json-report have different structures
         summary = json_data.get('summary', {})
         
-        return {
+        # Try multiple keys for each statistic
+        passed = (summary.get('passed') or 
+                  summary.get('num_passed') or 
+                  len([t for t in json_data.get('tests', []) if t.get('outcome') == 'passed']) or
+                  0)
+        
+        failed = (summary.get('failed') or 
+                  summary.get('num_failed') or 
+                  len([t for t in json_data.get('tests', []) if t.get('outcome') == 'failed']) or
+                  0)
+        
+        skipped = (summary.get('skipped') or 
+                   summary.get('num_skipped') or 
+                   len([t for t in json_data.get('tests', []) if t.get('outcome') == 'skipped']) or
+                   0)
+        
+        errors = (summary.get('error') or 
+                  summary.get('errors') or 
+                  summary.get('num_errors') or
+                  len([t for t in json_data.get('tests', []) if t.get('outcome') == 'error']) or
+                  0)
+        
+        duration = summary.get('duration', 0) or summary.get('total_duration', 0)
+        
+        console.print(f"[dim]JSON summary: {summary}[/dim]")
+        console.print(f"[dim]Tests array length: {len(json_data.get('tests', []))}[/dim]")
+        
+        result = {
             'success': True,
-            'passed': summary.get('passed', 0),
-            'failed': summary.get('failed', 0),
-            'skipped': summary.get('skipped', 0),
-            'duration': summary.get('duration', 0),
-            'test_file': test_file_path,
-            'details': json_data.get('tests', []),
-            'method': 'pytest_json'
-        }
-    
-    def _parse_pytest_text_output(self, result: subprocess.CompletedProcess, test_file_path: str) -> Dict[str, Any]:
-        """Parse pytest text output"""
-        output = result.stdout + result.stderr
-        
-        # Extract test counts using regex
-        passed_match = re.search(r'(\d+) passed', output)
-        failed_match = re.search(r'(\d+) failed', output)
-        skipped_match = re.search(r'(\d+) skipped', output)
-        error_match = re.search(r'(\d+) error', output)
-        
-        passed = int(passed_match.group(1)) if passed_match else 0
-        failed = int(failed_match.group(1)) if failed_match else 0
-        skipped = int(skipped_match.group(1)) if skipped_match else 0
-        errors = int(error_match.group(1)) if error_match else 0
-        
-        # Extract duration
-        duration_match = re.search(r'(\d+\.?\d*) seconds', output)
-        duration = float(duration_match.group(1)) if duration_match else 0
-        
-        # Determine if execution was actually successful
-        success = result.returncode == 0 and (passed > 0 or failed >= 0)
-        
-        return {
-            'success': success,
             'passed': passed,
-            'failed': failed,
+            'failed': failed + errors,  # Combine errors with failures
             'skipped': skipped,
-            'errors': errors,
             'duration': duration,
             'test_file': test_file_path,
-            'output': output,
-            'return_code': result.returncode,
-            'method': 'pytest_text'
+            'details': json_data.get('tests', []),
+            'method': 'pytest_json',
+            'raw_summary': summary  # Include for debugging
         }
+        
+        console.print(f"[cyan]Parsed result: {passed} passed, {failed + errors} failed, {skipped} skipped[/cyan]")
+        
+        return result
+
     
     def _parse_unittest_output(self, result: subprocess.CompletedProcess, test_file_path: str) -> Dict[str, Any]:
         """Parse unittest output"""
         output = result.stdout + result.stderr
         
         # Parse unittest output patterns
-        # Look for patterns like "Ran 5 tests in 0.001s" and "OK" or "FAILED"
         ran_match = re.search(r'Ran (\d+) tests? in ([\d.]+)s', output)
         ok_match = re.search(r'\nOK\n', output)
         failed_match = re.search(r'FAILED \(failures=(\d+)\)', output)
@@ -530,121 +613,98 @@ except Exception as e:
                 'success': False,
                 'error': f'Installation attempt failed: {str(e)}'
             }
+    def _parse_pytest_text_output(self, result: subprocess.CompletedProcess, test_file_path: str) -> Dict[str, Any]:
+        """Parse pytest text output - ENHANCED VERSION"""
+        console.print("[dim]Parsing pytest text output...[/dim]")
+        
+        output = result.stdout + result.stderr
+        
+        # Print the full output for debugging
+        console.print(f"[dim]Output preview (first 500 chars):\n{output[:500]}[/dim]")
+        
+        # Extract test counts using multiple regex patterns
+        passed = 0
+        failed = 0
+        skipped = 0
+        errors = 0
+        
+        # Try different patterns
+        patterns = [
+            # Pattern 1: "5 passed in 0.12s"
+            (r'(\d+)\s+passed', 'passed'),
+            # Pattern 2: "passed=5"
+            (r'passed=(\d+)', 'passed'),
+            # Pattern 3: Count "PASSED" occurrences
+            (r'::test_\w+\s+PASSED', 'passed_count'),
+        ]
+        
+        for pattern, ptype in patterns:
+            matches = re.findall(pattern, output)
+            if matches:
+                if ptype == 'passed_count':
+                    passed = len(matches)
+                else:
+                    passed = int(matches[0])
+                console.print(f"[dim]Found passed using pattern '{pattern}': {passed}[/dim]")
+                break
+        
+        # Similar for failed
+        failed_patterns = [
+            (r'(\d+)\s+failed', int),
+            (r'failed=(\d+)', int),
+            (r'::test_\w+\s+FAILED', len),
+        ]
+        
+        for pattern, converter in failed_patterns:
+            matches = re.findall(pattern, output)
+            if matches:
+                if converter == len:
+                    failed = len(matches)
+                else:
+                    failed = converter(matches[0])
+                console.print(f"[dim]Found failed using pattern '{pattern}': {failed}[/dim]")
+                break
+        
+        # Skipped
+        skipped_match = re.search(r'(\d+)\s+skipped', output)
+        if skipped_match:
+            skipped = int(skipped_match.group(1))
+        
+        # Errors
+        error_match = re.search(r'(\d+)\s+error', output)
+        if error_match:
+            errors = int(error_match.group(1))
+        
+        # Extract duration
+        duration_match = re.search(r'in\s+([\d.]+)s', output)
+        duration = float(duration_match.group(1)) if duration_match else 0
+        
+        # If we couldn't find any results, try to parse the summary line
+        if passed == 0 and failed == 0:
+            # Look for lines like "= 15 passed in 0.34s ="
+            summary_match = re.search(r'=+\s*(\d+)\s+passed.*?=+', output)
+            if summary_match:
+                passed = int(summary_match.group(1))
+                console.print(f"[dim]Found passed from summary line: {passed}[/dim]")
+        
+        # Determine overall success
+        # Success if: returncode is 0 OR we have passing tests with no failures
+        success = (result.returncode == 0) or (passed > 0 and failed == 0 and errors == 0)
+        
+        result_dict = {
+            'success': success,
+            'passed': passed,
+            'failed': failed + errors,  # Combine errors with failures
+            'skipped': skipped,
+            'errors': errors,
+            'duration': duration,
+            'test_file': test_file_path,
+            'output': output,
+            'return_code': result.returncode,
+            'method': 'pytest_text'
+        }
+        
+        console.print(f"[cyan]Parsed result: {passed} passed, {failed + errors} failed, return_code={result.returncode}[/cyan]")
+        
+        return result_dict
     
-    def _read_and_convert_to_unittest(self, test_file_path: str) -> str:
-        """Read test file and convert pytest syntax to unittest"""
-        try:
-            with open(test_file_path, 'r') as f:
-                content = f.read()
-            
-            # Basic pytest to unittest conversion
-            unittest_content = """import unittest
-import sys
-from pathlib import Path
-
-# Add source to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-"""
-            
-            # Extract imports (excluding pytest-specific ones)
-            import_lines = []
-            for line in content.split('\n'):
-                if line.strip().startswith(('import ', 'from ')) and 'pytest' not in line:
-                    import_lines.append(line)
-            
-            unittest_content += '\n'.join(import_lines) + '\n\n'
-            
-            # Create test class
-            class_name = f"Test{Path(test_file_path).stem.replace('test_', '').title()}"
-            unittest_content += f"class {class_name}(unittest.TestCase):\n\n"
-            
-            # Convert test functions
-            test_functions = re.findall(r'def (test_\w+.*?)(?=def test_|\Z)', content, re.DOTALL)
-            
-            for func_match in test_functions:
-                # Convert pytest assertions to unittest
-                func_content = func_match
-                
-                # Basic assertion conversions
-                func_content = re.sub(r'assert ([^=]+) == ([^,\n]+)', r'self.assertEqual(\1, \2)', func_content)
-                func_content = re.sub(r'assert ([^,\n]+)', r'self.assertTrue(\1)', func_content)
-                func_content = re.sub(r'with pytest\.raises\(([^)]+)\):', r'with self.assertRaises(\1):', func_content)
-                
-                # Add proper indentation (unittest methods need 4 extra spaces)
-                func_lines = func_content.split('\n')
-                indented_lines = []
-                for line in func_lines:
-                    if line.strip():
-                        indented_lines.append('    ' + line)
-                    else:
-                        indented_lines.append(line)
-                
-                unittest_content += '\n'.join(indented_lines) + '\n\n'
-            
-            unittest_content += """
-if __name__ == '__main__':
-    unittest.main(verbosity=2)
-"""
-            
-            return unittest_content
-            
-        except Exception as e:
-            console.print(f"[yellow]Conversion failed: {e}[/yellow]")
-            return ""
-    
-    def _create_test_wrapper(self, test_content: str, test_file_path: str) -> str:
-        """Create a wrapper script for direct test execution"""
-        return f"""
-import sys
-import traceback
-import re
-from pathlib import Path
-
-# Add source directory to path
-test_file_dir = Path(r"{test_file_path}").parent
-source_dir = test_file_dir.parent
-sys.path.insert(0, str(source_dir))
-
-# Test execution results
-passed = 0
-failed = 0
-errors = []
-
-print("Starting direct test execution...")
-
-# Import the test content
-test_globals = {{}}
-test_locals = {{}}
-
-try:
-    # Execute the test file to define functions
-    exec('''{test_content}''', test_globals, test_locals)
-    
-    # Find and execute test functions
-    for name, obj in test_locals.items():
-        if name.startswith('test_') and callable(obj):
-            try:
-                print(f"Running {{name}}...")
-                obj()
-                passed += 1
-                print(f"✅ {{name}} PASSED")
-            except Exception as e:
-                failed += 1
-                error_msg = f"❌ {{name}} FAILED: {{str(e)}}"
-                errors.append(error_msg)
-                print(error_msg)
-                print(f"   Traceback: {{traceback.format_exc().split(chr(10))[-3]}}")
-    
-    print(f"\\n=== RESULTS ===")
-    print(f"RESULTS: {{passed}} passed, {{failed}} failed")
-    if errors:
-        print("\\nFAILED TESTS:")
-        for error in errors:
-            print(f"  {{error}}")
-            
-except Exception as e:
-    print(f"EXECUTION ERROR: {{str(e)}}")
-    print(f"TRACEBACK: {{traceback.format_exc()}}")
-    failed = 1
-"""
