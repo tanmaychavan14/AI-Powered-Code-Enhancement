@@ -141,7 +141,7 @@ class TestAgent:
         return structure
     
     def _analyze_javascript_structure(self, content: str) -> Dict[str, Any]:
-        """Analyze JavaScript code structure using regex patterns"""
+        """Analyze JavaScript code structure - FIXED VERSION (no false positives)"""
         structure = {
             'functions': [],
             'classes': [],
@@ -151,18 +151,31 @@ class TestAgent:
         try:
             # Find function declarations
             func_patterns = [
-                r'function\s+(\w+)\s*\(([^)]*)\)\s*{',  # function name(args) {
-                r'const\s+(\w+)\s*=\s*\(([^)]*)\)\s*=>\s*{',  # const name = (args) => {
-                r'let\s+(\w+)\s*=\s*\(([^)]*)\)\s*=>\s*{',    # let name = (args) => {
-                r'var\s+(\w+)\s*=\s*function\s*\(([^)]*)\)\s*{',  # var name = function(args) {
-                r'(\w+):\s*function\s*\(([^)]*)\)\s*{',  # name: function(args) {
-                r'(\w+)\s*\(([^)]*)\)\s*{',  # name(args) { (method in object/class)
+                r'function\s+(\w+)\s*\(([^)]*)\)\s*{',
+                r'const\s+(\w+)\s*=\s*\(([^)]*)\)\s*=>\s*{',
+                r'const\s+(\w+)\s*=\s*function\s*\(([^)]*)\)\s*{',
+                r'let\s+(\w+)\s*=\s*\(([^)]*)\)\s*=>\s*{',
+                r'var\s+(\w+)\s*=\s*function\s*\(([^)]*)\)\s*{',
             ]
+            
+            # Track seen functions to avoid duplicates
+            seen_functions = set()
             
             for pattern in func_patterns:
                 matches = re.finditer(pattern, content, re.MULTILINE)
                 for match in matches:
                     func_name = match.group(1)
+                    
+                    # Skip duplicates
+                    if func_name in seen_functions:
+                        continue
+                    
+                    # Skip loop variables and keywords
+                    if func_name in ['for', 'if', 'while', 'i', 'j', 'k', 'x', 'y', 'z']:
+                        continue
+                    
+                    seen_functions.add(func_name)
+                    
                     args_str = match.group(2) if match.group(2) else ""
                     
                     # Parse arguments
@@ -171,9 +184,11 @@ class TestAgent:
                         args = [arg.strip().split('=')[0].strip() for arg in args_str.split(',')]
                         args = [arg for arg in args if arg and not arg.startswith('...')]
                     
-                    # Analyze function body for operations
-                    func_start = match.end()
+                    # Extract function body
+                    func_start = match.end() - 1  # Include opening brace
                     func_body = self._extract_function_body_js(content, func_start)
+                    
+                    # Analyze operations (use existing analyzer)
                     operations = self._analyze_js_operations(func_body)
                     
                     structure['functions'].append({
@@ -190,8 +205,8 @@ class TestAgent:
             class_matches = re.finditer(class_pattern, content, re.MULTILINE)
             for match in class_matches:
                 class_name = match.group(1)
-                class_start = match.end()
-                class_body = self._extract_class_body_js(content, class_start)
+                class_start = match.end() - 1
+                class_body = self._extract_function_body_js(content, class_start)
                 methods = self._extract_js_methods(class_body)
                 
                 structure['classes'].append({
@@ -204,7 +219,7 @@ class TestAgent:
             import_patterns = [
                 r'import\s+.*?from\s+[\'"]([^\'"]+)[\'"]',
                 r'import\s+[\'"]([^\'"]+)[\'"]',
-                r'const\s+.*?=\s+require\([\'"]([^\'"]+)[\'"]\)',
+                r'const\s+.*?=\s*require\([\'"]([^\'"]+)[\'"]\)',
                 r'require\([\'"]([^\'"]+)[\'"]\)'
             ]
             
@@ -217,6 +232,7 @@ class TestAgent:
             console.print(f"[yellow]⚠️ Error analyzing JavaScript code: {e}[/yellow]")
         
         return structure
+
     
     def _analyze_java_structure(self, content: str) -> Dict[str, Any]:
         """Analyze Java code structure using regex patterns"""
@@ -356,20 +372,87 @@ class TestAgent:
         return [match.group(1) for match in matches]
     
     def _analyze_js_operations(self, func_body: str) -> List[str]:
-        """Analyze JavaScript function body for operations"""
-        operations = []
+        """
+        Analyze JavaScript function for REAL operations.
+        This implementation removes comments and string literals first to avoid false positives,
+        then heuristically detects common operations (string/array ops, arithmetic, control flow, etc.).
+        """
+        operations: List[str] = []
         
-        if '+' in func_body: operations.append('addition')
-        if '-' in func_body: operations.append('subtraction')
-        if '*' in func_body: operations.append('multiplication')
-        if '/' in func_body: operations.append('division')
-        if 'return' in func_body: operations.append('return_value')
-        if 'console.log' in func_body: operations.append('logging')
-        if 'fetch' in func_body or 'axios' in func_body: operations.append('http_request')
-        if 'JSON.parse' in func_body or 'JSON.stringify' in func_body: operations.append('json_processing')
-        if '.map(' in func_body or '.filter(' in func_body or '.reduce(' in func_body: operations.append('array_processing')
+        # Remove single-line (//...) and multi-line (/* ... */) comments
+        clean_body = re.sub(r'//.*?$|/\*.*?\*/', '', func_body, flags=re.DOTALL | re.MULTILINE)
+        # Remove string literals (single, double and template) to avoid false matches
+        clean_body = re.sub(r'(\'(?:\\.|[^\\\'])*\'|"(?:\\.|[^\\"])*"|`(?:\\.|[^\\`])*`)', '', clean_body, flags=re.DOTALL)
         
-        return operations
+        # String operations
+        if '.split(' in clean_body:
+            operations.append('string_split')
+        
+        if '.join(' in clean_body:
+            operations.append('string_join')
+        
+        if '.toUpperCase(' in clean_body or '.toLowerCase(' in clean_body:
+            operations.append('case_conversion')
+        
+        if '.reverse(' in clean_body:
+            operations.append('array_reversal')
+        
+        if '.trim(' in clean_body:
+            operations.append('string_trim')
+        
+        # Array operations
+        if '.push(' in clean_body or '.pop(' in clean_body:
+            operations.append('array_modification')
+        
+        if '.map(' in clean_body or '.filter(' in clean_body or '.reduce(' in clean_body:
+            operations.append('array_processing')
+        
+        # Arithmetic (exclude common loop increments like i++ or i += 1)
+        # Only count if it's a real expression (heuristic using return/expression patterns)
+        if re.search(r'\breturn\b.*[\+\-\*\/]', clean_body) or re.search(r'=\s*[^=].*[\+\-\*\/]', clean_body):
+            if '+' in clean_body:
+                operations.append('arithmetic_add')
+            if '-' in clean_body:
+                operations.append('arithmetic_subtract')
+            if '*' in clean_body:
+                operations.append('arithmetic_multiply')
+            if '/' in clean_body and '//' not in clean_body:
+                operations.append('arithmetic_divide')
+        
+        # Modulo operation
+        if re.search(r'\w+\s*%\s*\d+', clean_body):
+            operations.append('modulo')
+        
+        # Comparisons
+        if '===' in clean_body or '!==' in clean_body or '==' in clean_body or '!=' in clean_body:
+            operations.append('comparison')
+        
+        # Conditionals
+        if re.search(r'\bif\b|\belse\b|\?', clean_body):
+            operations.append('conditional')
+        
+        # Loops
+        if re.search(r'\bfor\b|\bwhile\b|\bforEach\b', clean_body):
+            operations.append('iteration')
+        
+        # Return
+        if re.search(r'\breturn\b', clean_body):
+            operations.append('return_value')
+        
+        # Logging
+        if 'console.' in clean_body:
+            operations.append('console_output')
+        
+        # HTTP
+        if 'fetch' in clean_body or 'axios' in clean_body:
+            operations.append('http_request')
+        
+        # JSON
+        if 'JSON.parse' in clean_body or 'JSON.stringify' in clean_body:
+            operations.append('json_processing')
+        
+        # Remove duplicates while preserving order
+        return list(dict.fromkeys(operations))
     
     def _analyze_java_operations(self, method_body: str) -> List[str]:
         """Analyze Java method body for operations"""
@@ -851,7 +934,7 @@ IMPORTANT: Look at the actual function implementations to understand:
 - What operations they perform
 - Whether they're synchronous or asynchronous
 
-Generate complete Jest test code with proper imports/requires and realistic test data.
+
 Use describe() blocks to group related tests.
 Only return the JavaScript test code, no explanations.
 """

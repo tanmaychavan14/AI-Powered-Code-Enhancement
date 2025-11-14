@@ -15,76 +15,77 @@ def is_even(num):
 def generate_numbers(start, end):
     return list(range(start, end + 1))
 
+# Pytest test cases
 class TestReverseString:
-    def test_normal_string(self):
+    def test_reverse_normal_string(self):
         assert reverse_string("hello") == "olleh"
 
-    def test_empty_string(self):
+    def test_reverse_empty_string(self):
         assert reverse_string("") == ""
 
-    def test_palindrome(self):
+    def test_reverse_palindrome(self):
         assert reverse_string("madam") == "madam"
 
-    def test_string_with_spaces(self):
+    def test_reverse_string_with_spaces(self):
         assert reverse_string("hello world") == "dlrow olleh"
 
 class TestWordCount:
-    def test_normal_string(self):
+    def test_word_count_normal_string(self):
         assert word_count("hello world") == 2
 
-    def test_empty_string(self):
+    def test_word_count_empty_string(self):
         assert word_count("") == 0
 
-    def test_string_with_leading_and_trailing_spaces(self):
+    def test_word_count_string_with_leading_and_trailing_spaces(self):
         assert word_count("  hello world  ") == 2
 
-    def test_string_with_multiple_spaces(self):
+    def test_word_count_string_with_multiple_spaces(self):
         assert word_count("hello   world") == 2
 
-    def test_string_with_tabs(self):
-        assert word_count("hello\tworld") == 2
+    def test_word_count_string_with_only_spaces(self):
+        assert word_count("   ") == 0
 
 class TestToUpper:
-    def test_normal_string(self):
+    def test_to_upper_normal_string(self):
         assert to_upper("hello") == "HELLO"
 
-    def test_empty_string(self):
+    def test_to_upper_empty_string(self):
         assert to_upper("") == ""
 
-    def test_string_with_mixed_case(self):
+    def test_to_upper_string_with_mixed_case(self):
         assert to_upper("Hello World") == "HELLO WORLD"
 
-    def test_string_with_numbers(self):
-        assert to_upper("Hello 123") == "HELLO 123"
+    def test_to_upper_string_with_numbers(self):
+        assert to_upper("Hello123World") == "HELLO123WORLD"
 
 class TestIsEven:
-    def test_even_number(self):
-        assert is_even(2) == True
+    def test_is_even_even_number(self):
+        assert is_even(4) == True
 
-    def test_odd_number(self):
-        assert is_even(3) == False
+    def test_is_even_odd_number(self):
+        assert is_even(5) == False
 
-    def test_zero(self):
+    def test_is_even_zero(self):
         assert is_even(0) == True
 
-    def test_negative_even_number(self):
-        assert is_even(-2) == True
+    def test_is_even_negative_even_number(self):
+        assert is_even(-4) == True
 
-    def test_negative_odd_number(self):
-        assert is_even(-3) == False
+    def test_is_even_negative_odd_number(self):
+        assert is_even(-5) == False
 
 class TestGenerateNumbers:
-    def test_normal_range(self):
+    def test_generate_numbers_normal_range(self):
         assert generate_numbers(1, 5) == [1, 2, 3, 4, 5]
 
-    def test_start_equals_end(self):
+    def test_generate_numbers_same_start_and_end(self):
         assert generate_numbers(5, 5) == [5]
 
-    def test_start_greater_than_end(self):
+    def test_generate_numbers_start_greater_than_end(self):
         assert generate_numbers(5, 1) == []
 
-    def test_negative_range(self):
-        assert generate_numbers(-3, 3) == [-3, -2, -1, 0, 1, 2, 3]
+    def test_generate_numbers_negative_range(self):
+        assert generate_numbers(-2, 2) == [-2, -1, 0, 1, 2]
 
-    def test_zero_range(self):
-        assert generate_numbers(0, 0) == [0]
+    def test_generate_numbers_negative_start_and_end(self):
+        assert generate_numbers(-5, -1) == [-5, -4, -3, -2, -1]

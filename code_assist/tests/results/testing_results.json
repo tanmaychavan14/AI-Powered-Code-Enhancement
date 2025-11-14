@@ -1,13 +1,13 @@
 {
   "service": "Testing",
-  "project_path": "E:\\Major Project\\testing_files\\python.py",
+  "project_path": "E:\\Python\\python project\\imgSteg.py",
   "files_analyzed": 1,
   "files_processed": 1,
-  "tests_generated": 23,
-  "tests_passed": 23,
+  "tests_generated": 22,
+  "tests_passed": 22,
   "tests_failed": 0,
   "test_files": [
-    "tests\\generated\\python\\test_python.py"
+    "tests\\generated\\python\\test_imgSteg.py"
   ],
   "status": "completed",
   "message": "Testing completed"

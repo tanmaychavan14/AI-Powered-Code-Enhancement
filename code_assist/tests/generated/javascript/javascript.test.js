@@ -58,8 +58,8 @@ describe('Calculator', () => {
       expect(calculator.subtract(-5, -3)).toBe(-2);
     });
 
-    it('should subtract a number and zero correctly', () => {
-      expect(calculator.subtract(5, 0)).toBe(5);
+    it('should subtract a number from zero correctly', () => {
+      expect(calculator.subtract(0, 5)).toBe(-5);
     });
   });
 
