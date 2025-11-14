@@ -1,8 +1,11 @@
 {
-  "name": "ai-powered-code-enhancement",
+  "name": "code_assist",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -11,5 +14,8 @@
   "license": "ISC",
   "devDependencies": {
     "jest": "^30.2.0"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
   }
 }

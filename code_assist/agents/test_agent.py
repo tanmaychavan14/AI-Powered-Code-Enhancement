@@ -893,7 +893,6 @@ Only return the Python test code, no explanations.
 Generate complete pytest code with proper imports and realistic test data.
 Only return the Python test code, no explanations.
 """
-        
         elif language == 'javascript':
             function_details = []
             for func in test_targets['functions']:
@@ -903,41 +902,39 @@ Only return the Python test code, no explanations.
                 if func.get('docstring') and func['docstring'] != "No comment available":
                     detail += f" - Purpose: {func['docstring'][:100]}..."
                 function_details.append(detail)
-            
-            return f"""You are an expert JavaScript test engineer. Generate comprehensive Jest test cases.
 
-STRICT RULES:
-1. NEVER write placeholder tests (expect(true).toBe(true), TODO, etc.)
-2. ANALYZE the actual code to understand function behavior
-3. Generate REAL test cases with actual expected results
-4. Each function needs 3-5 meaningful test cases
-5. Use proper Jest patterns and matchers
+            import textwrap
+
+            prompt = textwrap.dedent(f"""
+You are an expert JavaScript developer and test engineer.
+
+YOUR TASK (IMPORTANT):
+1. Analyze the provided code.
+2. For every function/class in FUNCTION TARGETS:
+   - If the implementation exists → improve and fix it.
+   - If missing → generate a complete implementation.
+3. The ENTIRE implementation MUST be included INSIDE the test file itself.
+   ❗ Do NOT use require(), import(), or external files.
+   ❗ The test file must run standalone with no dependencies.
+4. After generating the implementation, generate FULL Jest test cases for it.
+5. Return output in ONE combined file with TWO SECTIONS:
+
+=====BEGIN IMPLEMENTATION=====
+<all function/class implementations here — fully self-contained>
+=====END IMPLEMENTATION=====
+
+=====BEGIN TEST CASES=====
+<self-contained Jest tests that use the above implementations>
+=====END TEST CASES=====
 
 JAVASCRIPT CODE TO ANALYZE:
-```javascript
-{content}
-```
+""") + "```javascript\n" + content + "\n```" + textwrap.dedent(f"""
 
-FUNCTIONS TO TEST (analyze each one carefully):
+FUNCTION TARGETS:
 {chr(10).join(function_details)}
-
-For EACH function above, create tests that:
-- Test normal operation with typical inputs
-- Test edge cases (null, undefined, empty arrays/objects)
-- Test error conditions (invalid inputs, thrown errors)
-- Verify return values and types
-- Test async functions with proper await/promises if applicable
-
-IMPORTANT: Look at the actual function implementations to understand:
-- What parameters they expect
-- What they return
-- What operations they perform
-- Whether they're synchronous or asynchronous
-
-
-Use describe() blocks to group related tests.
-Only return the JavaScript test code, no explanations.
-"""
+""")
+            
+            return prompt
         
         elif language == 'java':
             function_details = []
