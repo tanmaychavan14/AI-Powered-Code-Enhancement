@@ -911,7 +911,7 @@ You are an expert JavaScript developer and test engineer.
 YOUR TASK (IMPORTANT):
 1. Analyze the provided code.
 2. For every function/class in FUNCTION TARGETS:
-   - If the implementation exists → improve and fix it.
+   - also give implementation means the function that given in prompt .
    - If missing → generate a complete implementation.
 3. The ENTIRE implementation MUST be included INSIDE the test file itself.
    ❗ Do NOT use require(), import(), or external files.
@@ -920,13 +920,23 @@ YOUR TASK (IMPORTANT):
 5. Return output in ONE combined file with TWO SECTIONS:
 
 =====BEGIN IMPLEMENTATION=====
-<all function/class implementations here — fully self-contained>
+<all function/class implementations here — fully self-contained>All function should be present as it is.
+All function and class implementations here . all function code should be present as it is.
+ Keep existing implementations exactly as they are
+ Add missing implementations if needed
+ NO imports, NO requires, NO module.exports
 =====END IMPLEMENTATION=====
 
 =====BEGIN TEST CASES=====
 <self-contained Jest tests that use the above implementations>
 =====END TEST CASES=====
 
+                                     REMEMBER:
+✅ Keep all existing code from the source file
+✅ Implementation section comes first
+✅ Test cases section comes second
+✅ NO imports or requires anywhere
+✅ Self-contained, runnable file
 JAVASCRIPT CODE TO ANALYZE:
 """) + "```javascript\n" + content + "\n```" + textwrap.dedent(f"""
 

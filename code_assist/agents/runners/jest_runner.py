@@ -611,7 +611,7 @@ class JestRunner:
                     capture_output=True,
                     timeout=5,
                     cwd=self.project_root,
-
+                    shell = True,
 
                     encoding='utf-8',
                     errors='replace'
@@ -700,7 +700,8 @@ class JestRunner:
                     timeout=30,
                     cwd=self.project_root,
                     encoding='utf-8',
-                    errors='replace'
+                    errors='replace',
+                    shell = True
                 )
                 
                 parsed = self._parse_jest_output(result, str(test_file))
