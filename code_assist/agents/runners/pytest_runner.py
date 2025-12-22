@@ -38,11 +38,21 @@ class PytestRunner:
         for i, strategy in enumerate(self.execution_strategies):
             try:
                 result = strategy(test_file_path)
-                if result['success']:
-                    console.print(f"[green]✅ Tests executed successfully using strategy {i+1}[/green]")
-                    return result
+                # if result['success']:
+                #     console.print(f"[green]✅ Tests executed successfully using strategy {i+1}[/green]")
+                #     return result
+                # else:
+                #     console.print(f"[yellow]Strategy {i+1} failed: {result.get('error', 'Unknown error')}[/yellow]")
+                tests_executed = result.get('passed', 0) + result.get('failed', 0) > 0
+
+                if result['success'] and tests_executed:
+                 return result  # Tests ran perfectly
+                elif tests_executed:
+                 return result  # ✅ Tests ran (some may have failed, but pytest worked!)
                 else:
-                    console.print(f"[yellow]Strategy {i+1} failed: {result.get('error', 'Unknown error')}[/yellow]")
+                 continue  # Pytest actually failed, try next strategy
+                
+
             except Exception as e:
                 console.print(f"[yellow]Strategy {i+1} exception: {e}[/yellow]")
                 continue
@@ -689,8 +699,10 @@ except Exception as e:
         
         # Determine overall success
         # Success if: returncode is 0 OR we have passing tests with no failures
-        success = (result.returncode == 0) or (passed > 0 and failed == 0 and errors == 0)
-        
+        # success = (result.returncode == 0) or (passed > 0 and failed == 0 and errors == 0)
+        tests_were_executed = (passed > 0) or (failed > 0) or (errors > 0)
+        success = tests_were_executed
+# ✅ Success means "pytest ran", not "all tests passed"
         result_dict = {
             'success': success,
             'passed': passed,

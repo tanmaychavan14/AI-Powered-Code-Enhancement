@@ -23,159 +23,134 @@ def generate_numbers(start, end):
     return list(range(start, end + 1))
 
 
-class TestStringOperations:
+# Test cases for reverse_string(text)
+@pytest.mark.parametrize("input_text, expected_output", [
+    ("hello", "olleh"),
+    ("world", "dlrow"),
+    ("Python", "nohtyP"),
+    ("A man, a plan, a canal: Panama", "amanaP :lanac a ,nalp a ,nam A"),
+    ("", ""), # Edge case: empty string
+    ("a", "a"), # Edge case: single character
+    (" ", " "), # Edge case: single space
+    ("12345", "54321"), # Numbers as string
+    ("!@#$", "$#@!"), # Special characters
+])
+def test_reverse_string_valid_inputs(input_text, expected_output):
+    """Test reverse_string with various valid string inputs."""
+    assert reverse_string(input_text) == expected_output
+    assert isinstance(reverse_string(input_text), str)
 
-    @pytest.mark.parametrize("input_text, expected_output", [
-        ("hello", "olleh"),
-        ("Python", "nohtyP"),
-        ("a", "a"),
-        ("", ""),
-        ("racecar", "racecar"),
-        ("123 abc!", "!cba 321"),
-    ])
-    def test_reverse_string_normal_and_edge_cases(self, input_text, expected_output):
-        """Test reverse_string with typical, empty, and special character inputs."""
-        assert reverse_string(input_text) == expected_output
-        assert isinstance(reverse_string(input_text), str)
+def test_reverse_string_type_error_for_non_string():
+    """Test reverse_string raises TypeError for non-string input."""
+    with pytest.raises(TypeError):
+        reverse_string(123)
+    with pytest.raises(TypeError):
+        reverse_string(['a', 'b'])
 
-    @pytest.mark.parametrize("invalid_input", [
-        123,
-        None,
-        ["a", "b", "c"],  # List slicing works, but type is list. Still good to check
-        (1, 2, 3), # Tuple slicing works, but type is tuple. Still good to check
-    ])
-    def test_reverse_string_invalid_input_type(self, invalid_input):
-        """Test reverse_string with invalid input types."""
-        # Note: text[::-1] actually works for lists and tuples, returning a list or tuple.
-        # So we check for non-string types where the *expected* return type is string.
-        if not isinstance(invalid_input, (str, list, tuple)):
-            with pytest.raises(TypeError):
-                reverse_string(invalid_input)
-        else:
-            # For lists and tuples, slicing works, but the return type won't be str
-            assert type(reverse_string(invalid_input)) == type(invalid_input)
+# Test cases for word_count(text)
+@pytest.mark.parametrize("input_text, expected_count", [
+    ("hello world", 2),
+    ("This is a test sentence.", 5),
+    ("singleword", 1),
+    ("", 0), # Edge case: empty string
+    ("   ", 0), # Edge case: only spaces
+    ("  leading and trailing spaces ", 4), # Edge case: leading/trailing spaces
+    ("words   with   multiple  spaces", 4), # Edge case: multiple spaces between words
+    ("123 456 test", 3), # Numbers in words
+    ("word-with-hyphen hyphenated-word", 2), # Hyphenated words are treated as one by split()
+])
+def test_word_count_valid_inputs(input_text, expected_count):
+    """Test word_count with various valid string inputs."""
+    assert word_count(input_text) == expected_count
+    assert isinstance(word_count(input_text), int)
 
+def test_word_count_type_error_for_non_string():
+    """Test word_count raises AttributeError for non-string input."""
+    with pytest.raises(AttributeError):
+        word_count(123)
+    with pytest.raises(AttributeError):
+        word_count(['a', 'b'])
 
-    @pytest.mark.parametrize("input_text, expected_count", [
-        ("hello world", 2),
-        ("one", 1),
-        ("  multiple   spaces  between words ", 4),
-        (" leading and trailing spaces ", 4),
-        ("", 0),
-        ("   ", 0),  # Only spaces
-        ("pytest_framework", 1), # Single word with underscore
-        ("1 2 3 4", 4),
-    ])
-    def test_word_count_normal_and_edge_cases(self, input_text, expected_count):
-        """Test word_count with various string inputs including spaces and empty."""
-        assert word_count(input_text) == expected_count
-        assert isinstance(word_count(input_text), int)
+# Test cases for to_upper(text)
+@pytest.mark.parametrize("input_text, expected_output", [
+    ("hello", "HELLO"),
+    ("World", "WORLD"),
+    ("PYTHON", "PYTHON"), # Already uppercase
+    ("mixed Case String", "MIXED CASE STRING"),
+    ("123", "123"), # Numbers should remain unchanged
+    ("!@#$", "!@#$"), # Special characters should remain unchanged
+    ("", ""), # Edge case: empty string
+    ("a", "A"), # Edge case: single character
+])
+def test_to_upper_valid_inputs(input_text, expected_output):
+    """Test to_upper with various valid string inputs."""
+    assert to_upper(input_text) == expected_output
+    assert isinstance(to_upper(input_text), str)
 
-    @pytest.mark.parametrize("invalid_input", [
-        123,
-        None,
-        ["a", "b"],
-        {"key": "value"},
-    ])
-    def test_word_count_invalid_input_type(self, invalid_input):
-        """Test word_count with non-string input types."""
-        with pytest.raises(AttributeError):
-            word_count(invalid_input)
+def test_to_upper_type_error_for_non_string():
+    """Test to_upper raises AttributeError for non-string input."""
+    with pytest.raises(AttributeError):
+        to_upper(123)
+    with pytest.raises(AttributeError):
+        to_upper(['a', 'b'])
 
+# Test cases for is_even(num)
+@pytest.mark.parametrize("input_num, expected_bool", [
+    (2, True),
+    (4, True),
+    (0, True), # Edge case: zero
+    (100, True),
+    (-2, True), # Negative even
+    (1, False),
+    (3, False),
+    (99, False),
+    (-1, False), # Negative odd
+    (2**30, True), # Large even number
+    (2**30 + 1, False), # Large odd number
+])
+def test_is_even_valid_inputs(input_num, expected_bool):
+    """Test is_even with various valid integer inputs."""
+    assert is_even(input_num) == expected_bool
+    assert isinstance(is_even(input_num), bool)
 
-    @pytest.mark.parametrize("input_text, expected_output", [
-        ("hello world", "HELLO WORLD"),
-        ("PYTHON", "PYTHON"),
-        ("PyTest", "PYTEST"),
-        ("123 abc!", "123 ABC!"),
-        ("", ""),
-        ("   ", "   "),
-    ])
-    def test_to_upper_normal_and_edge_cases(self, input_text, expected_output):
-        """Test to_upper with various string inputs including empty and already uppercase."""
-        assert to_upper(input_text) == expected_output
-        assert isinstance(to_upper(input_text), str)
+def test_is_even_type_error_for_non_integer():
+    """Test is_even raises TypeError for non-integer input."""
+    with pytest.raises(TypeError):
+        is_even(1.5) # Float
+    with pytest.raises(TypeError):
+        is_even("two") # String
+    with pytest.raises(TypeError):
+        is_even([2]) # List
+    with pytest.raises(TypeError):
+        is_even(None) # None type
 
-    @pytest.mark.parametrize("invalid_input", [
-        123,
-        None,
-        ["a", "b"],
-        {"key": "value"},
-    ])
-    def test_to_upper_invalid_input_type(self, invalid_input):
-        """Test to_upper with non-string input types."""
-        with pytest.raises(AttributeError):
-            to_upper(invalid_input)
+# Test cases for generate_numbers(start, end)
+@pytest.mark.parametrize("start, end, expected_list", [
+    (1, 5, [1, 2, 3, 4, 5]),
+    (0, 0, [0]), # Edge case: start == end
+    (5, 5, [5]), # Another start == end
+    (-2, 2, [-2, -1, 0, 1, 2]),
+    (10, 7, []), # Edge case: start > end (empty list)
+    (0, 3, [0, 1, 2, 3]),
+    (-5, -3, [-5, -4, -3]),
+    (1, 100, list(range(1, 101))), # Larger range
+])
+def test_generate_numbers_valid_inputs(start, end, expected_list):
+    """Test generate_numbers with various valid integer start and end values."""
+    assert generate_numbers(start, end) == expected_list
+    assert isinstance(generate_numbers(start, end), list)
+    if expected_list: # Check type of elements if list is not empty
+        assert all(isinstance(x, int) for x in generate_numbers(start, end))
 
-
-class TestNumberOperations:
-
-    @pytest.mark.parametrize("input_num, expected_result", [
-        (4, True),
-        (0, True),
-        (-2, True),
-        (100, True),
-        (7, False),
-        (1, False),
-        (-5, False),
-        (99, False),
-    ])
-    def test_is_even_integer_inputs(self, input_num, expected_result):
-        """Test is_even with various integer inputs (positive, negative, zero)."""
-        assert is_even(input_num) == expected_result
-        assert isinstance(is_even(input_num), bool)
-
-    @pytest.mark.parametrize("input_num, expected_result", [
-        (4.0, True),  # 4.0 % 2 == 0.0
-        (0.0, True),
-        (-2.0, True),
-        (7.0, False),  # 7.0 % 2 == 1.0
-        (3.5, False),  # 3.5 % 2 == 1.5
-        (-1.5, False), # -1.5 % 2 == 0.5
-    ])
-    def test_is_even_float_inputs(self, input_num, expected_result):
-        """Test is_even with float inputs, considering modulo behavior."""
-        assert is_even(input_num) == expected_result
-        assert isinstance(is_even(input_num), bool)
-
-    @pytest.mark.parametrize("invalid_input", [
-        "abc",
-        None,
-        [],
-        {"key": 1},
-    ])
-    def test_is_even_invalid_input_type(self, invalid_input):
-        """Test is_even with non-numeric input types."""
-        with pytest.raises(TypeError):
-            is_even(invalid_input)
-
-
-    @pytest.mark.parametrize("start, end, expected_list", [
-        (1, 5, [1, 2, 3, 4, 5]),
-        (0, 0, [0]),
-        (5, 5, [5]),
-        (-3, 1, [-3, -2, -1, 0, 1]),
-        (10, 7, []),  # Start > End
-        (-5, -2, [-5, -4, -3, -2]),
-        (0, 5, [0, 1, 2, 3, 4, 5]),
-    ])
-    def test_generate_numbers_normal_and_edge_cases(self, start, end, expected_list):
-        """Test generate_numbers with various start/end combinations including empty range."""
-        result = generate_numbers(start, end)
-        assert result == expected_list
-        assert isinstance(result, list)
-        for num in result:
-            assert isinstance(num, int)
-
-    @pytest.mark.parametrize("start, end", [
-        ("a", 5),
-        (1, "b"),
-        (None, 10),
-        (5, None),
-        ([], 1),
-        (1, {}),
-    ])
-    def test_generate_numbers_invalid_input_type(self, start, end):
-        """Test generate_numbers with non-integer input types for start or end."""
-        with pytest.raises(TypeError):
-            generate_numbers(start, end)
+def test_generate_numbers_type_error_for_non_integer_inputs():
+    """Test generate_numbers raises TypeError for non-integer start or end."""
+    with pytest.raises(TypeError):
+        generate_numbers(1.0, 5)
+    with pytest.raises(TypeError):
+        generate_numbers(1, 5.0)
+    with pytest.raises(TypeError):
+        generate_numbers("1", 5)
+    with pytest.raises(TypeError):
+        generate_numbers(1, "5")
+    with pytest.raises(TypeError):
+        generate_numbers(None, 5)

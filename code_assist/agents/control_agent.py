@@ -482,40 +482,65 @@ class ControlAgent:
             console.print(f"[red]Service routing error: {e}[/red]")
             return {'error': f"Service routing failed: {str(e)}"}
     
-    def _handle_testing_request(self, parsed_data: Dict[str, Any], project_path: str) -> Dict[str, Any]:
-        """Handle testing service request"""
+    def _handle_testing_request(self, parsed_data: Dict[str, Any], 
+                           project_path: str) -> Dict[str, Any]:
+        """Enhanced testing handler with integrated debugging"""
         try:
-            console.print("[bold cyan]  Running Testing Services...[/bold cyan]")
+            console.print("[bold cyan]Running Testing with Debug Integration...[/bold cyan]")
             
             # Show what files we're testing
             self.output_agent.display_file_tree(parsed_data, "Files to Test")
             
-            # Generate tests using test agent
-            test_results = self.test_agent.generate_tests(parsed_data)
+            # Create coordinator
+            from agents.test_debug_integration import TestDebugCoordinator
+            coordinator = TestDebugCoordinator(
+                self.test_agent,
+                self.debug_agent,
+                self.output_agent
+            )
             
-            if 'error' in test_results:
-                return test_results
+            # Run complete workflow
+            workflow_results = coordinator.run_test_and_debug_workflow(
+                parsed_data,
+                project_path
+            )
             
-            # Create comprehensive results
+            test_results = workflow_results['test_results']
+            debug_results = workflow_results.get('debug_results')
+            
+            # ✅ FIX: Extract ALL the data properly from test_results
             results = {
-                'service': 'Testing',
+                'service': 'Testing with Debug',
                 'project_path': project_path,
                 'files_analyzed': len(parsed_data),
-                'files_processed': test_results.get('files_processed', 0),
                 'tests_generated': test_results.get('tests_generated', 0),
                 'tests_passed': test_results.get('tests_passed', 0),
                 'tests_failed': test_results.get('tests_failed', 0),
-                'test_files': test_results.get('test_files', []),
+                'functions_analyzed': test_results.get('functions_analyzed', 0),
+                'classes_analyzed': test_results.get('classes_analyzed', 0),  # ✅ Added
+                'test_files': test_results.get('test_files', []),  # ✅ Added
+                'execution_results': test_results.get('execution_results', {}),  # ✅ Added
+                'failed_tests': test_results.get('failed_tests', []),  # ✅ Added
+                'functions_with_failures': test_results.get('functions_with_failures', []),  # ✅ Added
+                'debugging_suggestions': test_results.get('debugging_suggestions', []),  # ✅ Added
                 'status': 'completed',
-                'message': test_results.get('message', 'Testing completed')
+                'workflow_completed': workflow_results.get('workflow_completed', False)
             }
             
-            # Save results
-            self.output_agent.save_results_to_file(results, 'testing')
+            # Add debug info if available
+            if debug_results:
+                results.update({
+                    'bugs_fixed': debug_results.get('fixes_generated', 0),
+                    'fix_files': debug_results.get('fix_files', []),
+                    'debug_status': 'completed'
+                })
             
             return results
             
         except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            import traceback
+            console.print(f"[dim]{traceback.format_exc()}[/dim]")
             return {'error': f"Testing service failed: {str(e)}"}
     
     def _handle_refactoring_request(self, parsed_data: Dict[str, Any], project_path: str) -> Dict[str, Any]:
