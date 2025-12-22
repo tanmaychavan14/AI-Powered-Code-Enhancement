@@ -1,7 +1,6 @@
 import pytest
 
-# Example Python functions with different operations
-
+# Copy of the original Python functions for testing
 # Reverse a string
 def reverse_string(text):
     return text[::-1]
@@ -22,135 +21,145 @@ def is_even(num):
 def generate_numbers(start, end):
     return list(range(start, end + 1))
 
+# --- Pytest Test Cases ---
 
-# Test cases for reverse_string(text)
-@pytest.mark.parametrize("input_text, expected_output", [
-    ("hello", "olleh"),
-    ("world", "dlrow"),
-    ("Python", "nohtyP"),
-    ("A man, a plan, a canal: Panama", "amanaP :lanac a ,nalp a ,nam A"),
-    ("", ""), # Edge case: empty string
-    ("a", "a"), # Edge case: single character
-    (" ", " "), # Edge case: single space
-    ("12345", "54321"), # Numbers as string
-    ("!@#$", "$#@!"), # Special characters
-])
-def test_reverse_string_valid_inputs(input_text, expected_output):
-    """Test reverse_string with various valid string inputs."""
-    assert reverse_string(input_text) == expected_output
-    assert isinstance(reverse_string(input_text), str)
+class TestReverseString:
+    def test_reverse_string_normal_case(self):
+        assert reverse_string("hello") == "olleh"
 
-def test_reverse_string_type_error_for_non_string():
-    """Test reverse_string raises TypeError for non-string input."""
-    with pytest.raises(TypeError):
-        reverse_string(123)
-    with pytest.raises(TypeError):
-        reverse_string(['a', 'b'])
+    def test_reverse_string_with_spaces(self):
+        assert reverse_string("Hello World") == "dlroW olleH"
 
-# Test cases for word_count(text)
-@pytest.mark.parametrize("input_text, expected_count", [
-    ("hello world", 2),
-    ("This is a test sentence.", 5),
-    ("singleword", 1),
-    ("", 0), # Edge case: empty string
-    ("   ", 0), # Edge case: only spaces
-    ("  leading and trailing spaces ", 4), # Edge case: leading/trailing spaces
-    ("words   with   multiple  spaces", 4), # Edge case: multiple spaces between words
-    ("123 456 test", 3), # Numbers in words
-    ("word-with-hyphen hyphenated-word", 2), # Hyphenated words are treated as one by split()
-])
-def test_word_count_valid_inputs(input_text, expected_count):
-    """Test word_count with various valid string inputs."""
-    assert word_count(input_text) == expected_count
-    assert isinstance(word_count(input_text), int)
+    def test_reverse_string_empty_string(self):
+        assert reverse_string("") == ""
 
-def test_word_count_type_error_for_non_string():
-    """Test word_count raises AttributeError for non-string input."""
-    with pytest.raises(AttributeError):
-        word_count(123)
-    with pytest.raises(AttributeError):
-        word_count(['a', 'b'])
+    def test_reverse_string_single_character(self):
+        assert reverse_string("a") == "a"
 
-# Test cases for to_upper(text)
-@pytest.mark.parametrize("input_text, expected_output", [
-    ("hello", "HELLO"),
-    ("World", "WORLD"),
-    ("PYTHON", "PYTHON"), # Already uppercase
-    ("mixed Case String", "MIXED CASE STRING"),
-    ("123", "123"), # Numbers should remain unchanged
-    ("!@#$", "!@#$"), # Special characters should remain unchanged
-    ("", ""), # Edge case: empty string
-    ("a", "A"), # Edge case: single character
-])
-def test_to_upper_valid_inputs(input_text, expected_output):
-    """Test to_upper with various valid string inputs."""
-    assert to_upper(input_text) == expected_output
-    assert isinstance(to_upper(input_text), str)
+    def test_reverse_string_numbers_and_symbols(self):
+        assert reverse_string("123!@#") == "#@!321"
 
-def test_to_upper_type_error_for_non_string():
-    """Test to_upper raises AttributeError for non-string input."""
-    with pytest.raises(AttributeError):
-        to_upper(123)
-    with pytest.raises(AttributeError):
-        to_upper(['a', 'b'])
+    def test_reverse_string_unicode(self):
+        assert reverse_string("été") == "été" # Should reverse correctly
 
-# Test cases for is_even(num)
-@pytest.mark.parametrize("input_num, expected_bool", [
-    (2, True),
-    (4, True),
-    (0, True), # Edge case: zero
-    (100, True),
-    (-2, True), # Negative even
-    (1, False),
-    (3, False),
-    (99, False),
-    (-1, False), # Negative odd
-    (2**30, True), # Large even number
-    (2**30 + 1, False), # Large odd number
-])
-def test_is_even_valid_inputs(input_num, expected_bool):
-    """Test is_even with various valid integer inputs."""
-    assert is_even(input_num) == expected_bool
-    assert isinstance(is_even(input_num), bool)
+    def test_reverse_string_non_string_input_type_error(self):
+        with pytest.raises(TypeError):
+            reverse_string(123)
+        with pytest.raises(TypeError):
+            reverse_string(None)
+        with pytest.raises(TypeError):
+            reverse_string(['a', 'b']) # Slicing works, but it's not a string
 
-def test_is_even_type_error_for_non_integer():
-    """Test is_even raises TypeError for non-integer input."""
-    with pytest.raises(TypeError):
-        is_even(1.5) # Float
-    with pytest.raises(TypeError):
-        is_even("two") # String
-    with pytest.raises(TypeError):
-        is_even([2]) # List
-    with pytest.raises(TypeError):
-        is_even(None) # None type
 
-# Test cases for generate_numbers(start, end)
-@pytest.mark.parametrize("start, end, expected_list", [
-    (1, 5, [1, 2, 3, 4, 5]),
-    (0, 0, [0]), # Edge case: start == end
-    (5, 5, [5]), # Another start == end
-    (-2, 2, [-2, -1, 0, 1, 2]),
-    (10, 7, []), # Edge case: start > end (empty list)
-    (0, 3, [0, 1, 2, 3]),
-    (-5, -3, [-5, -4, -3]),
-    (1, 100, list(range(1, 101))), # Larger range
-])
-def test_generate_numbers_valid_inputs(start, end, expected_list):
-    """Test generate_numbers with various valid integer start and end values."""
-    assert generate_numbers(start, end) == expected_list
-    assert isinstance(generate_numbers(start, end), list)
-    if expected_list: # Check type of elements if list is not empty
-        assert all(isinstance(x, int) for x in generate_numbers(start, end))
+class TestWordCount:
+    def test_word_count_normal_two_words(self):
+        assert word_count("Hello world") == 2
 
-def test_generate_numbers_type_error_for_non_integer_inputs():
-    """Test generate_numbers raises TypeError for non-integer start or end."""
-    with pytest.raises(TypeError):
-        generate_numbers(1.0, 5)
-    with pytest.raises(TypeError):
-        generate_numbers(1, 5.0)
-    with pytest.raises(TypeError):
-        generate_numbers("1", 5)
-    with pytest.raises(TypeError):
-        generate_numbers(1, "5")
-    with pytest.raises(TypeError):
-        generate_numbers(None, 5)
+    def test_word_count_multiple_words(self):
+        assert word_count("This is a test sentence") == 5
+
+    def test_word_count_single_word(self):
+        assert word_count("Python") == 1
+
+    def test_word_count_empty_string(self):
+        assert word_count("") == 0
+
+    def test_word_count_leading_trailing_spaces(self):
+        assert word_count("  leading and trailing  ") == 4
+
+    def test_word_count_multiple_internal_spaces(self):
+        assert word_count("one   two    three") == 3
+
+    def test_word_count_non_string_input_attribute_error(self):
+        with pytest.raises(AttributeError):
+            word_count(123)
+        with pytest.raises(AttributeError):
+            word_count(None)
+
+
+class TestToUpper:
+    def test_to_upper_lowercase(self):
+        assert to_upper("hello") == "HELLO"
+
+    def test_to_upper_mixed_case(self):
+        assert to_upper("Hello World") == "HELLO WORLD"
+
+    def test_to_upper_already_uppercase(self):
+        assert to_upper("PYTHON") == "PYTHON"
+
+    def test_to_upper_empty_string(self):
+        assert to_upper("") == ""
+
+    def test_to_upper_with_numbers_symbols(self):
+        assert to_upper("123!@abc") == "123!@ABC"
+
+    def test_to_upper_non_string_input_attribute_error(self):
+        with pytest.raises(AttributeError):
+            to_upper(123)
+        with pytest.raises(AttributeError):
+            to_upper(None)
+
+
+class TestIsEven:
+    def test_is_even_positive_even(self):
+        assert is_even(4) is True
+
+    def test_is_even_positive_odd(self):
+        assert is_even(7) is False
+
+    def test_is_even_zero(self):
+        assert is_even(0) is True
+
+    def test_is_even_negative_even(self):
+        assert is_even(-2) is True
+
+    def test_is_even_negative_odd(self):
+        assert is_even(-3) is False
+
+    def test_is_even_large_number(self):
+        assert is_even(1000000) is True
+        assert is_even(999999) is False
+
+    def test_is_even_non_integer_type_error(self):
+        with pytest.raises(TypeError):
+            is_even(3.5) # Modulo operator also works on floats
+        with pytest.raises(TypeError):
+            is_even("hello")
+        with pytest.raises(TypeError):
+            is_even(None)
+
+
+class TestGenerateNumbers:
+    def test_generate_numbers_positive_range(self):
+        assert generate_numbers(1, 5) == [1, 2, 3, 4, 5]
+
+    def test_generate_numbers_single_number(self):
+        assert generate_numbers(7, 7) == [7]
+
+    def test_generate_numbers_zero_to_positive(self):
+        assert generate_numbers(0, 3) == [0, 1, 2, 3]
+
+    def test_generate_numbers_negative_range(self):
+        assert generate_numbers(-3, -1) == [-3, -2, -1]
+
+    def test_generate_numbers_across_zero(self):
+        assert generate_numbers(-1, 1) == [-1, 0, 1]
+
+    def test_generate_numbers_empty_range_start_greater_than_end(self):
+        assert generate_numbers(5, 3) == []
+
+    def test_generate_numbers_large_range(self):
+        expected = list(range(1, 101))
+        assert generate_numbers(1, 100) == expected
+
+    def test_generate_numbers_non_integer_start_type_error(self):
+        with pytest.raises(TypeError):
+            generate_numbers("1", 5)
+        with pytest.raises(TypeError):
+            generate_numbers(1.5, 5)
+
+    def test_generate_numbers_non_integer_end_type_error(self):
+        with pytest.raises(TypeError):
+            generate_numbers(1, None)
+        with pytest.raises(TypeError):
+            generate_numbers(1, "5")

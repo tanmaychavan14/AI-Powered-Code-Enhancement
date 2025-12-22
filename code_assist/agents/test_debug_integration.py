@@ -21,63 +21,125 @@ class TestDebugCoordinator:
         self.output_agent = output_agent
         self.console = Console()
     
+    # def run_test_and_debug_workflow(self, parsed_data: Dict[str, Any], 
+    #                                 project_path: str) -> Dict[str, Any]:
+    #     """
+    #     Complete workflow: test generation → execution → debugging
+    #     """
+    #     console.print("\n[bold cyan]🚀 Starting Test-Debug Workflow[/bold cyan]\n")
+        
+    #     workflow_results = {
+    #         'test_results': None,
+    #         'debug_results': None,
+    #         'workflow_completed': False
+    #     }
+        
+    #     # Step 1: Generate and run tests
+    #     console.print("[bold blue]Step 1: Test Generation & Execution[/bold blue]")
+    #     test_results = self.test_agent.generate_tests(parsed_data)
+    #     workflow_results['test_results'] = test_results
+        
+    #     if 'error' in test_results:
+    #         console.print(f"[red]❌ Testing failed: {test_results['error']}[/red]")
+    #         return workflow_results
+        
+    #     # Step 2: Check if debugging is needed
+    #     tests_failed = test_results.get('tests_failed', 0)
+        
+    #     if tests_failed == 0:
+    #         console.print("\n[bold green]🎉 All tests passed! No debugging needed.[/bold green]")
+    #         workflow_results['workflow_completed'] = True
+    #         return workflow_results
+        
+    #     # Step 3: Prompt for debugging
+    #     console.print(f"\n[yellow]⚠️  Found {tests_failed} failing test(s)[/yellow]")
+        
+    #     # Show debugging prompt
+    #     self._show_debugging_prompt(test_results)
+        
+    #     # Ask user if they want auto-debug
+    #     should_debug = Confirm.ask(
+    #         "\n[bold cyan]Would you like to auto-debug with AI?[/bold cyan]",
+    #         default=True
+    #     )
+        
+    #     if not should_debug:
+    #         console.print("\n[dim]Skipping debug. You can run debug manually later.[/dim]")
+    #         workflow_results['workflow_completed'] = True
+    #         return workflow_results
+        
+    #     # Step 4: Run debugging
+    #     console.print("\n[bold blue]Step 2: AI-Powered Debugging[/bold blue]")
+    #     debug_results = self.debug_agent.analyze_and_fix(test_results, parsed_data)
+    #     workflow_results['debug_results'] = debug_results
+        
+    #     # Step 5: Show final summary
+    #     self._show_final_summary(test_results, debug_results)
+        
+    #     workflow_results['workflow_completed'] = True
+    #     return workflow_results
+    
+
     def run_test_and_debug_workflow(self, parsed_data: Dict[str, Any], 
-                                    project_path: str) -> Dict[str, Any]:
-        """
-        Complete workflow: test generation → execution → debugging
-        """
-        console.print("\n[bold cyan]🚀 Starting Test-Debug Workflow[/bold cyan]\n")
-        
-        workflow_results = {
-            'test_results': None,
-            'debug_results': None,
-            'workflow_completed': False
-        }
-        
-        # Step 1: Generate and run tests
-        console.print("[bold blue]Step 1: Test Generation & Execution[/bold blue]")
-        test_results = self.test_agent.generate_tests(parsed_data)
-        workflow_results['test_results'] = test_results
-        
-        if 'error' in test_results:
-            console.print(f"[red]❌ Testing failed: {test_results['error']}[/red]")
-            return workflow_results
-        
-        # Step 2: Check if debugging is needed
-        tests_failed = test_results.get('tests_failed', 0)
-        
-        if tests_failed == 0:
-            console.print("\n[bold green]🎉 All tests passed! No debugging needed.[/bold green]")
-            workflow_results['workflow_completed'] = True
-            return workflow_results
-        
-        # Step 3: Prompt for debugging
-        console.print(f"\n[yellow]⚠️  Found {tests_failed} failing test(s)[/yellow]")
-        
-        # Show debugging prompt
-        self._show_debugging_prompt(test_results)
-        
-        # Ask user if they want auto-debug
-        should_debug = Confirm.ask(
-            "\n[bold cyan]Would you like to auto-debug with AI?[/bold cyan]",
-            default=True
-        )
-        
-        if not should_debug:
-            console.print("\n[dim]Skipping debug. You can run debug manually later.[/dim]")
-            workflow_results['workflow_completed'] = True
-            return workflow_results
-        
-        # Step 4: Run debugging
-        console.print("\n[bold blue]Step 2: AI-Powered Debugging[/bold blue]")
-        debug_results = self.debug_agent.analyze_and_fix(test_results, parsed_data)
-        workflow_results['debug_results'] = debug_results
-        
-        # Step 5: Show final summary
-        self._show_final_summary(test_results, debug_results)
-        
+                                project_path: str) -> Dict[str, Any]:
+     """
+     Complete workflow: test generation → execution → debugging
+     """
+     console.print("\n[bold cyan]🚀 Starting Test-Debug Workflow[/bold cyan]\n")
+    
+     workflow_results = {
+        'test_results': None,
+        'debug_results': None,
+        'workflow_completed': False
+     }
+    
+    # Step 1: Generate and run tests
+     console.print("[bold blue]Step 1: Test Generation & Execution[/bold blue]")
+     test_results = self.test_agent.generate_tests(parsed_data)
+     workflow_results['test_results'] = test_results
+    
+    # ✅ Check if test generation failed
+     if 'error' in test_results:
+        console.print(f"[red]❌ Testing failed: {test_results['error']}[/red]")
+        workflow_results['workflow_completed'] = False
+        return workflow_results
+    
+    # Step 2: Check if debugging is needed
+     tests_failed = test_results.get('tests_failed', 0)
+    
+    # ✅ Handle successful case (no failures)
+     if tests_failed == 0:
+        console.print("\n[bold green]🎉 All tests passed! No debugging needed.[/bold green]")
         workflow_results['workflow_completed'] = True
         return workflow_results
+    
+    # Step 3: Prompt for debugging (only if there are failures)
+     console.print(f"\n[yellow]⚠️  Found {tests_failed} failing test(s)[/yellow]")
+    
+    # Show debugging prompt
+     self._show_debugging_prompt(test_results)
+    
+    # Ask user if they want auto-debug
+     should_debug = Confirm.ask(
+        "\n[bold cyan]Would you like to auto-debug with AI?[/bold cyan]",
+        default=True
+     )
+    
+     if not should_debug:
+        console.print("\n[dim]Skipping debug. You can run debug manually later.[/dim]")
+        workflow_results['workflow_completed'] = True
+        return workflow_results
+    
+    # Step 4: Run debugging
+     console.print("\n[bold blue]Step 2: AI-Powered Debugging[/bold blue]")
+     debug_results = self.debug_agent.analyze_and_fix(test_results, parsed_data)
+     workflow_results['debug_results'] = debug_results
+    
+    # Step 5: Show final summary
+     self._show_final_summary(test_results, debug_results)
+    
+     workflow_results['workflow_completed'] = True
+     return workflow_results
     
     def _show_debugging_prompt(self, test_results: Dict[str, Any]):
         """Show detailed debugging prompt"""

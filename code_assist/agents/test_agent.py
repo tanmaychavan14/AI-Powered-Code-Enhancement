@@ -1206,7 +1206,8 @@ class TestAgent:
                 'failed_tests': [],
                 'functions_with_failures': [],
                 'debugging_suggestions': [],
-                'llm_status': 'available'
+                'llm_status': 'available',
+                'debugging_needed': False 
             }
             
             for file_path, file_data in parsed_data.items():
@@ -1301,33 +1302,198 @@ class TestAgent:
     
     def _extract_failure_details(self, exec_result: Dict, functions: List[Dict], 
                                  classes: List[Dict], file_path: str) -> Dict[str, Any]:
-        """Extract detailed failure information"""
+        """Extract detailed failure information from pytest output - FIXED VERSION"""
         failed_info = {
             'failed_tests': [],
             'functions': []
         }
         
         output = exec_result.get('output', '')
-        failed_test_names = re.findall(r'test_(\w+).*?(?:FAILED|✗|❌)', output)
         
-        for test_name in failed_test_names:
-            original_function = None
-            for func in functions:
-                if test_name.lower() in func['name'].lower():
-                    original_function = func['name']
-                    break
+        console.print(f"[dim]DEBUG: Analyzing pytest output for failures[/dim]")
+        console.print(f"[dim]DEBUG: Output length: {len(output)} chars[/dim]")
+        
+        # ✅ CORRECT PATTERN: Extract from pytest output format:
+        # tests\generated\python\test_python.py::test_reverse_string_empty FAILED
+        # The pattern after :: and before FAILED is the actual test function name
+        
+        failed_pattern = r'::([a-zA-Z_][a-zA-Z0-9_]*)\s+(?:FAILED|ERROR)'
+        matches = re.findall(failed_pattern, output)
+        
+        console.print(f"[dim]DEBUG: Found {len(matches)} failed test function names: {matches}[/dim]")
+        
+        # If no matches, try alternate patterns
+        if not matches:
+            # Try simpler pattern for different pytest output formats
+            failed_pattern = r'(test_[a-zA-Z0-9_]+)\s+FAILED'
+            matches = re.findall(failed_pattern, output)
+            console.print(f"[dim]DEBUG: Trying alternate pattern, found: {matches}[/dim]")
+        
+        # Remove duplicates while preserving order
+        seen_tests = set()
+        unique_matches = []
+        for match in matches:
+            if match not in seen_tests:
+                seen_tests.add(match)
+                unique_matches.append(match)
+        
+        console.print(f"[dim]DEBUG: Unique failed tests: {unique_matches}[/dim]")
+        
+        # Process each failed test
+        for test_function_name in unique_matches:
+            console.print(f"[dim]DEBUG: Processing failed test: {test_function_name}[/dim]")
+            
+            # ✅ Extract the original function name from test name
+            # test_reverse_string_empty -> reverse_string
+            # test_word_count_normal -> word_count
+            original_function = self._extract_function_name_from_test(test_function_name, functions)
+            
+            console.print(f"[dim]DEBUG: Matched to original function: {original_function}[/dim]")
+            
+            # Extract error details for this specific test
+            error_snippet = self._extract_error_snippet(output, test_function_name)
             
             failed_info['failed_tests'].append({
-                'test_name': f'test_{test_name}',
-                'original_function': original_function or 'Unknown',
+                'test_name': test_function_name,
+                'original_function': original_function,
                 'file': file_path,
-                'error_snippet': self._extract_error_snippet(output, test_name)
+                'error_snippet': error_snippet
             })
             
-            if original_function and original_function not in failed_info['functions']:
+            if original_function and original_function != 'Unknown' and original_function not in failed_info['functions']:
                 failed_info['functions'].append(original_function)
         
+        console.print(f"[green]DEBUG: Extracted {len(failed_info['failed_tests'])} failed tests[/green]")
+        console.print(f"[green]DEBUG: Affected functions: {failed_info['functions']}[/green]")
+        
         return failed_info
+
+    def _extract_function_name_from_test(self, test_name: str, functions: List[Dict]) -> str:
+        """
+        Extract original function name from test function name
+        
+        Examples:
+            test_reverse_string_empty -> reverse_string
+            test_word_count_normal -> word_count
+            test_is_even_positive -> is_even
+        """
+        console.print(f"[dim]  Extracting function name from: {test_name}[/dim]")
+        
+        # Remove 'test_' prefix
+        base_name = test_name
+        if base_name.startswith('test_'):
+            base_name = base_name[5:]  # Remove 'test_'
+    
+        console.print(f"[dim]  After removing test_ prefix: {base_name}[/dim]")
+    
+    # List of common test suffixes to remove
+        test_suffixes = [
+        '_valid_inputs', '_invalid_inputs',
+        '_empty', '_null', '_none',
+        '_positive', '_negative', '_zero',
+        '_normal', '_edge', '_boundary',
+        '_error', '_exception',
+        '_case1', '_case2', '_case3',
+        '_test', '_tests',
+        r'_\d+$'  # Remove trailing numbers
+        ]
+    
+    # Try exact match first (handles single-word function names)
+        for func in functions:
+         if base_name == func['name']:
+            console.print(f"[dim]  ✅ Exact match: {func['name']}[/dim]")
+            return func['name']
+    
+    # Try removing each suffix and matching
+        for suffix in test_suffixes:
+         cleaned_name = re.sub(suffix + r'$', '', base_name)
+        
+        # Try exact match with cleaned name
+        for func in functions:
+            if cleaned_name == func['name']:
+                console.print(f"[dim]  ✅ Match after removing '{suffix}': {func['name']}[/dim]")
+                return func['name']
+    
+    # Try progressive suffix removal (handle multiple suffixes)
+    # test_reverse_string_empty_case1 -> reverse_string
+        parts = base_name.split('_')
+    
+    # Try progressively shorter combinations
+        for i in range(len(parts), 0, -1):
+          candidate = '_'.join(parts[:i])
+        
+          for func in functions:
+            if candidate == func['name']:
+                console.print(f"[dim]  ✅ Match with progressive removal: {func['name']}[/dim]")
+                return func['name']
+    
+    # Try fuzzy matching (test name contains function name)
+        for func in functions:
+          if func['name'] in base_name:
+            console.print(f"[dim]  ✅ Fuzzy match (contains): {func['name']}[/dim]")
+            return func['name']
+    
+        console.print(f"[yellow]  ⚠️ No match found for: {test_name}[/yellow]")
+        console.print(f"[dim]  Available functions: {[f['name'] for f in functions]}[/dim]")
+    
+        return 'Unknown'
+
+
+    def _extract_error_snippet(self, output: str, test_name: str) -> str:
+     """Extract error message for specific test from pytest output"""
+    
+     console.print(f"[dim]  Extracting error for: {test_name}[/dim]")
+    
+     lines = output.split('\n')
+    
+    # Find the line with this test's FAILED marker
+     test_line_idx = -1
+     for i, line in enumerate(lines):
+        # Look for pattern: ::test_name FAILED
+        if f'::{test_name}' in line and 'FAILED' in line:
+            test_line_idx = i
+            console.print(f"[dim]  Found FAILED marker at line {i}[/dim]")
+            break
+    
+     if test_line_idx == -1:
+        # Fallback: search without ::
+        for i, line in enumerate(lines):
+            if test_name in line and 'FAILED' in line:
+                test_line_idx = i
+                break
+    
+     if test_line_idx == -1:
+        console.print(f"[dim]  Could not find FAILED marker for {test_name}[/dim]")
+        return "Error details not available"
+    
+    # Extract error context (next 5-10 lines after FAILED)
+     error_lines = []
+     start_idx = test_line_idx + 1
+     end_idx = min(test_line_idx + 15, len(lines))
+    
+     for i in range(start_idx, end_idx):
+        line = lines[i]
+        
+        # Stop at next test or section separator
+        if '::test_' in line or line.startswith('='):
+            break
+        
+        # Collect error lines (especially those starting with E)
+        if line.strip().startswith('E ') or 'assert' in line.lower() or 'error' in line.lower():
+            error_lines.append(line)
+        elif line.strip() and not line.startswith(' '):
+            # Stop at non-indented lines (new section)
+            break
+    
+     if error_lines:
+        result = '\n'.join(error_lines[:5])  # First 5 error lines
+        console.print(f"[dim]  Extracted {len(error_lines)} error lines[/dim]")
+        return result
+    
+    # Fallback: return context around FAILED
+     context = '\n'.join(lines[test_line_idx:min(test_line_idx + 3, len(lines))])
+     console.print(f"[dim]  Using fallback context[/dim]")
+     return context
     
     def _extract_error_snippet(self, output: str, test_name: str) -> str:
         """Extract error message for specific test"""

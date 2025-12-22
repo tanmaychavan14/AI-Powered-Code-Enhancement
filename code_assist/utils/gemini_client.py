@@ -77,7 +77,7 @@ class GeminiClient:
             self.model = genai.GenerativeModel('gemini-2.5-flash')
             self.client = True  # Mark as initialized
             
-            console.print(f"[green]✅ Gemini AI initialized with model: gemini-1.5-flash[/green]")
+            console.print(f"[green]✅ Gemini AI initialized with model: gemini-2.5-flash[/green]")
         except Exception as e:
             console.print(f"[red]❌ Gemini initialization failed: {e}[/red]")
             self.client = None
