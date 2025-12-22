@@ -547,12 +547,14 @@ class TestAgent:
             results = {
                 'files_processed': 0,
                 'tests_generated': 0,
+                'functions_tested': 0, 
                 'tests_passed': 0,
                 'tests_failed': 0,
                 'test_files': [],
                 'execution_results': {},
                 'errors': [],
-                'llm_status': 'available'
+                'llm_status': 'available',
+                'failed_tests': [],
             }
             
             for file_path, file_data in parsed_data.items():
@@ -894,57 +896,63 @@ Generate complete pytest code with proper imports and realistic test data.
 Only return the Python test code, no explanations.
 """
         elif language == 'javascript':
-            function_details = []
-            for func in test_targets['functions']:
-                detail = f"• {func.get('signature', func['name'])}"
-                if func.get('operations'):
-                    detail += f" - Operations: {', '.join(func['operations'])}"
-                if func.get('docstring') and func['docstring'] != "No comment available":
-                    detail += f" - Purpose: {func['docstring'][:100]}..."
-                function_details.append(detail)
+         function_details = []
+         for func in test_targets['functions']:
+           detail = f"• {func.get('signature', func['name'])}"
+           if func.get('operations'):
+            detail += f" - Operations: {', '.join(func['operations'])}"
+           if func.get('docstring') and func['docstring'] != "No comment available":
+            detail += f" - Purpose: {func['docstring'][:100]}..."
+           function_details.append(detail)
 
-            import textwrap
+         return f"""You are an expert JavaScript test engineer.
 
-            prompt = textwrap.dedent(f"""
-You are an expert JavaScript developer and test engineer.
+CRITICAL REQUIREMENTS:
+1. The test file MUST be completely self-contained
+2. Include ALL function implementations at the TOP of the test file
+3. DO NOT use require() or import statements
+4. Structure the file as:
+   - First: All function/class implementations
+   - Then: Jest test cases using those implementations
 
-YOUR TASK (IMPORTANT):
-1. Analyze the provided code.
-2. For every function/class in FUNCTION TARGETS:
-   - also give implementation means the function that given in prompt .
-   - If missing → generate a complete implementation.
-3. The ENTIRE implementation MUST be included INSIDE the test file itself.
-   ❗ Do NOT use require(), import(), or external files.
-   ❗ The test file must run standalone with no dependencies.
-4. After generating the implementation, generate FULL Jest test cases for it.
-5. Return output in ONE combined file with TWO SECTIONS:
+JAVASCRIPT CODE TO INCLUDE (copy these implementations exactly):
+```javascript
+{content}
+```
 
-=====BEGIN IMPLEMENTATION=====
-<all function/class implementations here — fully self-contained>All function should be present as it is.
-All function and class implementations here . all function code should be present as it is.
- Keep existing implementations exactly as they are
- Add missing implementations if needed
- NO imports, NO requires, NO module.exports
-=====END IMPLEMENTATION=====
-
-=====BEGIN TEST CASES=====
-<self-contained Jest tests that use the above implementations>
-=====END TEST CASES=====
-
-                                     REMEMBER:
-✅ Keep all existing code from the source file
-✅ Implementation section comes first
-✅ Test cases section comes second
-✅ NO imports or requires anywhere
-✅ Self-contained, runnable file
-JAVASCRIPT CODE TO ANALYZE:
-""") + "```javascript\n" + content + "\n```" + textwrap.dedent(f"""
-
-FUNCTION TARGETS:
+FUNCTIONS TO TEST:
 {chr(10).join(function_details)}
-""")
+
+Generate a SINGLE JavaScript file with this structure:
+```javascript
+// ============ IMPLEMENTATIONS ============
+// Copy ALL functions and classes from above here exactly as they are
+// (paste the entire content)
+
+// ============ TEST CASES ============
+describe('Test Suite', () => {{
+    test('test case 1', () => {{
+        // Use the functions defined above
+        expect(functionName(args)).toBe(expectedResult);
+    }});
+    
+    // More test cases...
+}});
+```
+
+IMPORTANT:
+- The test file must run standalone with Node.js
+- NO external dependencies
+- Copy the actual implementation code at the top
+- Then write comprehensive Jest tests below
+- Generate 3-5 meaningful tests per function
+
+Only return the complete JavaScript code, no explanations.
+"""        
+
+
             
-            return prompt
+        
         
         elif language == 'java':
             function_details = []

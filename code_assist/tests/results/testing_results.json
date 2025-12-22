@@ -1,14 +1,13 @@
 {
   "service": "Testing",
-  "project_path": "E:\\Major Project\\testing_files",
-  "files_analyzed": 2,
-  "files_processed": 2,
-  "tests_generated": 43,
-  "tests_passed": 43,
+  "project_path": "D:\\Major Project\\testing_files\\javascript.js",
+  "files_analyzed": 1,
+  "files_processed": 1,
+  "tests_generated": 24,
+  "tests_passed": 24,
   "tests_failed": 0,
   "test_files": [
-    "tests\\generated\\python\\test_python.py",
-    "tests\\generated\\python\\test_python1.py"
+    "tests\\generated\\javascript\\javascript.test.js"
   ],
   "status": "completed",
   "message": "Testing completed"
