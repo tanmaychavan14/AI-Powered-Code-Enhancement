@@ -212,13 +212,13 @@ class TestDebugCoordinator:
 # Integration into Control Agent
 # Add this method to your ControlAgent class:
 
-def _handle_testing_request_with_debug(self, parsed_data: Dict[str, Any], 
+    def _handle_testing_request_with_debug(self, parsed_data: Dict[str, Any], 
                                        project_path: str) -> Dict[str, Any]:
-    """
-    Enhanced testing handler with integrated debugging
-    Replace the existing _handle_testing_request with this
-    """
-    try:
+     """
+      Enhanced testing handler with integrated debugging
+     Replace the existing _handle_testing_request with this
+     """
+     try:
         console.print("[bold cyan]  Running Testing Services with Debug Integration...[/bold cyan]")
         
         # Show what files we're testing
@@ -265,7 +265,7 @@ def _handle_testing_request_with_debug(self, parsed_data: Dict[str, Any],
         
         return results
         
-    except Exception as e:
+     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         import traceback
         console.print(f"[dim]{traceback.format_exc()}[/dim]")
