@@ -245,7 +245,7 @@ class OutputAgent:
 #                 padding=(1, 2)
 #             )
 #             self.console.print(summary_panel)
-#             self.console.print() d
+#             self.console.print() ds
 
     def _display_test_statistics(self, results: Dict[str, Any]) -> None:
         """Display test execution statistics"""
