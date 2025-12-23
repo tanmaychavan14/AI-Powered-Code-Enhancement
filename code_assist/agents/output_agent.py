@@ -16,7 +16,7 @@ from rich.syntax import Syntax
 from rich.layout import Layout
 from rich.align import Align
 from rich.text import Text
-
+from core.service_config import SERVICE_MAP, normalize_service_name
 console = Console()
 
 class OutputAgent:
@@ -34,21 +34,44 @@ class OutputAgent:
             if 'error' in results:
                 self._display_error(results['error'], service_type)
                 return
-            
+            service_name = normalize_service_name(service_type)
             # Route to appropriate display method
             service_lower = service_type.lower()
+            if service_name == service_type.lower():  # Normalization didn't change it
+                if 'service' in results:
+                    result_service = results['service'].lower()
+                    # Try to extract service name from results
+                    for canonical_name in ['testing', 'refactoring', 'debugging', 
+                                          'documentation', 'analysis', 'planning']:
+                        if canonical_name in result_service:
+                            service_name = canonical_name
+                            break
             
-            if service_lower in ['test', 'testing']:
+            # if service_lower in ['test', 'testing']:
+            #     self._display_testing_results(results)
+            # elif service_lower in ['refactor', 'refactoring']:
+            #     self._display_refactoring_results(results)
+            # elif service_lower in ['debug', 'debugging']:
+            #     self._display_debugging_results(results)
+            # elif service_lower in ['docs', 'documentation']:
+            #     self._display_documentation_results(results)
+            # elif service_lower in ['analyze', 'analysis']:
+            #     self._display_analysis_results(results)
+            # elif service_lower in ['plan', 'planning']:
+            #     self._display_planning_results(results)
+            # else:
+            #     self._display_generic_results(results, service_type)
+            if service_name == 'testing':
                 self._display_testing_results(results)
-            elif service_lower in ['refactor', 'refactoring']:
+            elif service_name == 'refactoring':
                 self._display_refactoring_results(results)
-            elif service_lower in ['debug', 'debugging']:
+            elif service_name == 'debugging':
                 self._display_debugging_results(results)
-            elif service_lower in ['docs', 'documentation']:
+            elif service_name == 'documentation':
                 self._display_documentation_results(results)
-            elif service_lower in ['analyze', 'analysis']:
+            elif service_name == 'analysis':
                 self._display_analysis_results(results)
-            elif service_lower in ['plan', 'planning']:
+            elif service_name == 'planning':
                 self._display_planning_results(results)
             else:
                 self._display_generic_results(results, service_type)
@@ -66,12 +89,25 @@ class OutputAgent:
             'analysis': '📊',
             'planning': '📋'
         }
+        service_name = normalize_service_name(service_type)
+        icon = service_icons.get(service_name, '⚙️')
+        # icon = service_icons.get(service_type.lower(), '⚙️')
         
-        icon = service_icons.get(service_type.lower(), '⚙️')
+        # header_text = Text()
+        # header_text.append("AI-Powered Code Assistant\n", style="bold blue")
+        # header_text.append(f"{icon} {service_type.title()} Service", style="bold white")
         
+        # panel = Panel(
+        #     Align.center(header_text),
+        #     border_style="blue",
+        #     padding=(1, 2)
+        # )
+        
+        # self.console.print(panel)
+        # self.console.print()
         header_text = Text()
         header_text.append("AI-Powered Code Assistant\n", style="bold blue")
-        header_text.append(f"{icon} {service_type.title()} Service", style="bold white")
+        header_text.append(f"{icon} {service_name.title()} Service", style="bold white")
         
         panel = Panel(
             Align.center(header_text),

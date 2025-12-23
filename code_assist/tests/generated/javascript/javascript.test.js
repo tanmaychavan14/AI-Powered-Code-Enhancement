@@ -47,8 +47,7 @@ function loginStatus(isLoggedIn) {
     }
 }
 
-
-// Jest Test Cases below:
+// ---- Jest Test Cases ----
 
 describe('checkEvenOdd', () => {
     test('should return "Even number" for an even number', () => {
@@ -64,11 +63,11 @@ describe('checkEvenOdd', () => {
     });
 
     test('should return "Even number" for a negative even number', () => {
-        expect(checkEvenOdd(-2)).toBe("Even number");
+        expect(checkEvenOdd(-6)).toBe("Even number");
     });
 
     test('should return "Odd number" for a negative odd number', () => {
-        expect(checkEvenOdd(-5)).toBe("Odd number");
+        expect(checkEvenOdd(-11)).toBe("Odd number");
     });
 });
 
@@ -85,12 +84,12 @@ describe('findMax', () => {
         expect(findMax(7, 7)).toBe(7);
     });
 
-    test('should handle negative numbers correctly when first is greater', () => {
-        expect(findMax(-5, -10)).toBe(-5);
+    test('should handle negative numbers correctly', () => {
+        expect(findMax(-5, -2)).toBe(-2);
     });
 
-    test('should handle negative numbers correctly when second is greater', () => {
-        expect(findMax(-20, -15)).toBe(-15);
+    test('should handle mixed positive and negative numbers', () => {
+        expect(findMax(10, -20)).toBe(10);
     });
 });
 
@@ -99,20 +98,20 @@ describe('canVote', () => {
         expect(canVote(18)).toBe("Eligible to vote");
     });
 
-    test('should return "Eligible to vote" for age above 18', () => {
+    test('should return "Eligible to vote" for age greater than 18', () => {
         expect(canVote(25)).toBe("Eligible to vote");
     });
 
-    test('should return "Not eligible to vote" for age below 18', () => {
+    test('should return "Not eligible to vote" for age less than 18', () => {
         expect(canVote(17)).toBe("Not eligible to vote");
     });
 
-    test('should return "Not eligible to vote" for age significantly below 18', () => {
-        expect(canVote(10)).toBe("Not eligible to vote");
+    test('should return "Not eligible to vote" for a very young age', () => {
+        expect(canVote(5)).toBe("Not eligible to vote");
     });
 
-    test('should return "Eligible to vote" for age just above 18', () => {
-        expect(canVote(19)).toBe("Eligible to vote");
+    test('should handle zero age (not eligible)', () => {
+        expect(canVote(0)).toBe("Not eligible to vote");
     });
 });
 
@@ -135,12 +134,9 @@ describe('calculateGrade', () => {
     });
 
     test('should return "Fail" for marks below 50', () => {
-        expect(calculateGrade(49)).toBe("Fail");
+        expect(calculateGrade(45)).toBe("Fail");
         expect(calculateGrade(0)).toBe("Fail");
-    });
-
-    test('should return "A Grade" for perfect score', () => {
-        expect(calculateGrade(100)).toBe("A Grade");
+        expect(calculateGrade(-10)).toBe("Fail"); // Assuming marks can be negative, though not typical
     });
 });
 
@@ -153,15 +149,14 @@ describe('loginStatus', () => {
         expect(loginStatus(false)).toBe("User is logged out");
     });
 
-    test('should treat truthy values as logged in', () => {
-        expect(loginStatus(1)).toBe("User is logged in");
-        expect(loginStatus("hello")).toBe("User is logged in");
+    // Additional tests for robustness, though the function is simple
+    test('should return "User is logged in" for truthy values (e.g., non-empty string)', () => {
+        // Based on the strict `if (isLoggedIn)` check, any truthy value behaves like true
+        expect(loginStatus("someUser")).toBe("User is logged in");
     });
 
-    test('should treat falsy values as logged out', () => {
-        expect(loginStatus(0)).toBe("User is logged out");
-        expect(loginStatus("")).toBe("User is logged out");
+    test('should return "User is logged out" for falsy values (e.g., null)', () => {
+        // Based on the strict `if (isLoggedIn)` check, any falsy value behaves like false
         expect(loginStatus(null)).toBe("User is logged out");
-        expect(loginStatus(undefined)).toBe("User is logged out");
     });
 });

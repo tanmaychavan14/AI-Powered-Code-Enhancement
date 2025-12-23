@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from rich.console import Console
 from rich.panel import Panel
-
+from core.service_config import SERVICE_MAP, normalize_service_name
 console = Console()
 
 class ControlAgent:
@@ -365,10 +365,10 @@ class ControlAgent:
             
             # Step 4: Route to appropriate service agent
             results = self._route_to_service_agent(service_type, parsed_data, str(path))
-            
+            normalized_service = normalize_service_name(service_type)
             # Step 5: Display results via output agent
             if 'error' not in results:
-                self.output_agent.display_results(results, service_type)
+                self.output_agent.display_results(results, normalized_service)
             
             return {
                 'status': 'success' if 'error' not in results else 'error',
@@ -440,28 +440,29 @@ class ControlAgent:
         try:
             console.print(f"[bold blue]🤖 Initializing {service_type.title()} Agent[/bold blue]")
             
-            service_map = {
-                '1': 'testing',
-                'test': 'testing',
-                'testing': 'testing',
-                '2': 'refactoring', 
-                'refactor': 'refactoring',
-                'refactoring': 'refactoring',
-                '3': 'debugging',
-                'debug': 'debugging',
-                'debugging': 'debugging',
-                '4': 'documentation',
-                'docs': 'documentation',
-                'documentation': 'documentation',
-                '5': 'analysis',
-                'analyze': 'analysis',
-                'analysis': 'analysis',
-                '6': 'planning',
-                'plan': 'planning',
-                'planning': 'planning'
-            }
+            # service_map = {
+            #     '1': 'testing',
+            #     'test': 'testing',
+            #     'testing': 'testing',
+            #     '2': 'refactoring', 
+            #     'refactor': 'refactoring',
+            #     'refactoring': 'refactoring',
+            #     '3': 'debugging',
+            #     'debug': 'debugging',
+            #     'debugging': 'debugging',
+            #     '4': 'documentation',
+            #     'docs': 'documentation',
+            #     'documentation': 'documentation',
+            #     '5': 'analysis',
+            #     'analyze': 'analysis',
+            #     'analysis': 'analysis',
+            #     '6': 'planning',
+            #     'plan': 'planning',
+            #     'planning': 'planning'
+            # }
+            service_name = normalize_service_name(service_type)
             
-            service_name = service_map.get(service_type.lower(), service_type.lower())
+            # service_name = service_map.get(service_type.lower(), service_type.lower())
             
             if service_name == 'testing':
                 return self._handle_testing_request(parsed_data, project_path)
