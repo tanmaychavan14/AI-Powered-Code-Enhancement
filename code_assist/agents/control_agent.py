@@ -13,6 +13,7 @@ from typing import Dict, List, Any, Optional
 from rich.console import Console
 from rich.panel import Panel
 from core.service_config import SERVICE_MAP, normalize_service_name
+from agents.documentation_agent import DocumentationAgent
 console = Console()
 
 class ControlAgent:
@@ -25,6 +26,7 @@ class ControlAgent:
         self.refactor_agent = None
         self.debug_agent = None
         self.planner_agent = None
+        self.documentation_agent = None 
         
         # Initialize agents with safe error handling
         self._initialize_agents()
@@ -39,7 +41,7 @@ class ControlAgent:
         self.refactor_agent = self._create_fallback_refactor_agent()
         self.debug_agent = self._create_fallback_debug_agent()
         self.planner_agent = self._create_fallback_planner_agent()
-        
+        self.documentation_agent = self._create_fallback_documentation_agent()
         # Now try to load real agents and override fallbacks if successful
         self._try_load_real_agents()
     
@@ -114,7 +116,49 @@ class ControlAgent:
                 console.print("[dim green]✅ Real planner agent loaded[/dim green]")
         except Exception as e:
             console.print(f"[dim yellow]Using fallback planner agent: {type(e).__name__}[/dim yellow]")
+        
+        # Try to load Documentation Agent
+        try:
+          spec = importlib.util.find_spec("agents.documentation_agent")
+          if spec is not None:
+           from agents.documentation_agent import DocumentationAgent
+           temp_agent = DocumentationAgent()
+           self.documentation_agent = temp_agent
+           console.print("[dim green]✅ Real documentation agent loaded[/dim green]")
+        except Exception as e:
+           console.print(f"[dim yellow]Using fallback documentation agent: {type(e).__name__}[/dim yellow]")
+
+    def _create_fallback_documentation_agent(self):
+     """Create fallback documentation agent"""
+     class FallbackDocumentationAgent:
+        def generate_documentation(self, parsed_data):
+            console.print("[dim]📚 Running fallback documentation generation...[/dim]")
+            
+            docs_generated = []
+            files_documented = 0
+            
+            for file_path, data in parsed_data.items():
+                if data.get('parsed', False):
+                    files_documented += 1
+                    file_name = Path(file_path).stem
+                    docs_generated.append(f"{file_name}_README.md")
+            
+            return {
+                'success': True,
+                'status': 'completed',
+                'files_analyzed': len(parsed_data),
+                'files_documented': files_documented,
+                'documentation_files': docs_generated,
+                'documentation_details': [],
+                'coverage': (files_documented / len(parsed_data) * 100) if parsed_data else 0,
+                'total_sections': 0,
+                'errors': [],
+                'message': f'Documentation would be generated for {files_documented} files (fallback mode)'
+            }
     
+     return FallbackDocumentationAgent()     
+
+
     def _create_fallback_parser_agent(self):
         """Create fallback parser agent"""
         class FallbackParserAgent:
@@ -678,33 +722,70 @@ class ControlAgent:
         except Exception as e:
             return {'error': f"Debug service failed: {str(e)}"}
     
-    def _handle_documentation_request(self, parsed_data: Dict[str, Any], project_path: str) -> Dict[str, Any]:
-        """Handle documentation service request"""
-        try:
-            console.print("[bold cyan]  Running Documentation Services...[/bold cyan]")
+    # def _handle_documentation_request(self, parsed_data: Dict[str, Any], project_path: str) -> Dict[str, Any]:
+    #     """Handle documentation service request"""
+    #     try:
+    #         console.print("[bold cyan]  Running Documentation Services...[/bold cyan]")
             
-            self.output_agent.display_file_tree(parsed_data, "Files to Document")
+    #         self.output_agent.display_file_tree(parsed_data, "Files to Document")
             
-            # Generate documentation
-            docs_generated = []
-            for file_path, data in parsed_data.items():
-                if data.get('parsed', False):
-                    docs_generated.append(f"{Path(file_path).stem}_docs.md")
+    #         # Generate documentation
+    #         docs_generated = []
+    #         for file_path, data in parsed_data.items():
+    #             if data.get('parsed', False):
+    #                 docs_generated.append(f"{Path(file_path).stem}_docs.md")
             
-            results = {
-                'service': 'Documentation',
-                'project_path': project_path,
-                'files_documented': len(parsed_data),
-                'docs_generated': docs_generated,
-                'status': 'completed',
-                'message': f'Documentation generated for {len(parsed_data)} files using fallback agent'
-            }
+    #         results = {
+    #             'service': 'Documentation',
+    #             'project_path': project_path,
+    #             'files_documented': len(parsed_data),
+    #             'docs_generated': docs_generated,
+    #             'status': 'completed',
+    #             'message': f'Documentation generated for {len(parsed_data)} files using fallback agent'
+    #         }
             
-            return results
+    #         return results
             
-        except Exception as e:
-            return {'error': f"Documentation service failed: {str(e)}"}
+    #     except Exception as e:
+    #         return {'error': f"Documentation service failed: {str(e)}"}
     
+    def _handle_documentation_request(self, parsed_data: Dict[str, Any], project_path: str) -> Dict[str, Any]:
+     """Handle documentation service request with Gemini AI"""
+     try:
+        console.print("[bold cyan]📚 Running Documentation Services...[/bold cyan]")
+        
+        self.output_agent.display_file_tree(parsed_data, "Files to Document")
+        
+        # Generate documentation using Documentation Agent
+        console.print("\n[cyan]🤖 Generating documentation with Gemini AI...[/cyan]")
+        doc_results = self.documentation_agent.generate_documentation(parsed_data)
+        
+        # Format results for output agent
+        results = {
+            'service': 'Documentation',
+            'project_path': project_path,
+            'files_analyzed': doc_results.get('files_analyzed', 0),
+            'files_documented': doc_results.get('files_documented', 0),
+            'documentation_files': doc_results.get('documentation_files', []),
+            'documentation_details': doc_results.get('documentation_details', []),
+            'coverage': doc_results.get('coverage', 0.0),
+            'total_sections': doc_results.get('total_sections', 0),
+            'errors': doc_results.get('errors', []),
+            'status': doc_results.get('status', 'completed'),
+            'message': doc_results.get('message', 'Documentation generation completed')
+        }
+        
+        return results
+        
+     except Exception as e:
+        console.print(f"[red]❌ Documentation service error: {e}[/red]")
+        return {
+            'service': 'Documentation',
+            'project_path': project_path,
+            'error': f"Documentation service failed: {str(e)}",
+            'status': 'failed'
+        }
+     
     def _handle_analysis_request(self, parsed_data: Dict[str, Any], project_path: str) -> Dict[str, Any]:
         """Handle code analysis service request"""
         try:

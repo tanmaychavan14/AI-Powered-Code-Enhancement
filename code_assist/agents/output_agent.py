@@ -1104,3 +1104,267 @@ class OutputAgent:
      message = results.get('message')
      if message:
         self.console.print(f"\n[bold green]✅ {message}[/bold green]\n")
+    
+
+    def _display_documentation_results(self, results: Dict[str, Any]) -> None:
+     """Display comprehensive documentation results"""
+    
+    # 1. Project Summary
+     self._display_documentation_summary(results)
+    
+    # 2. Documentation Statistics
+     self._display_documentation_statistics(results)
+    
+    # 3. Generated Documentation Files
+     self._display_documentation_files(results)
+    
+    # 4. Documentation Preview
+     self._display_documentation_preview(results)
+    
+    # 5. Recommendations
+     self._display_documentation_recommendations(results)
+
+
+    def _display_documentation_summary(self, results: Dict[str, Any]) -> None:
+     """Display documentation project overview"""
+     summary_table = Table(title="📋 Documentation Overview", border_style="cyan")
+     summary_table.add_column("Metric", style="cyan", width=20)
+     summary_table.add_column("Value", style="green", width=40)
+    
+     summary_table.add_row("Project Path", str(results.get('project_path', 'N/A')))
+     summary_table.add_row("Files Analyzed", str(results.get('files_analyzed', 0)))
+     summary_table.add_row("Files Documented", str(results.get('files_documented', 0)))
+     summary_table.add_row("Documentation Coverage", f"{results.get('coverage', 0)}%")
+     summary_table.add_row("Status", results.get('status', 'Unknown'))
+    
+     self.console.print(summary_table)
+     self.console.print()
+
+
+    def _display_documentation_statistics(self, results: Dict[str, Any]) -> None:
+     """Display documentation generation statistics"""
+     files_analyzed = results.get('files_analyzed', 0)
+     files_documented = results.get('files_documented', 0)
+     coverage = results.get('coverage', 0.0)
+     total_sections = results.get('total_sections', 0)
+    
+    # Create statistics table
+     stats_table = Table(title="📊 Documentation Statistics", border_style="green")
+     stats_table.add_column("Metric", style="cyan", width=30)
+     stats_table.add_column("Count", style="white", width=10, justify="right")
+     stats_table.add_column("Details", style="dim", width=30)
+    
+     stats_table.add_row(
+        "Files Analyzed", 
+        str(files_analyzed), 
+        "source code files"
+    )
+     stats_table.add_row(
+        "Files Documented", 
+        str(files_documented), 
+        "✅ Successfully documented" if files_documented > 0 else "⚠️  None"
+    )
+    
+    # Separator
+     stats_table.add_row("", "", "")
+    
+     stats_table.add_row(
+        "Total Sections Generated", 
+        str(total_sections), 
+        "documentation sections"
+    )
+    
+    # Coverage metric
+     if files_analyzed > 0:
+        status = "🎉 Excellent" if coverage >= 80 else "✅ Good" if coverage >= 50 else "⚠️  Needs Work"
+        stats_table.add_row("Documentation Coverage", f"{coverage}%", status)
+        
+        # Average sections per file
+        avg_sections = total_sections / files_documented if files_documented > 0 else 0
+        stats_table.add_row(
+            "Avg Sections/File", 
+            f"{avg_sections:.1f}", 
+            "sections per file"
+        )
+    
+     self.console.print(stats_table)
+     self.console.print()
+    
+    # Add visual summary panel
+     if files_documented > 0:
+        coverage_color = "green" if coverage >= 80 else "yellow"
+        
+        summary_text = f"""
+[bold cyan]📚 Documentation Summary[/bold cyan]
+
+• Analyzed [yellow]{files_analyzed} file(s)[/yellow]
+• Documented [green]{files_documented} file(s)[/green]
+• Generated [blue]{total_sections} section(s)[/blue]
+• Coverage: [{coverage_color}]{coverage}%[/{coverage_color}]
+• Quality: [green]AI-Generated with Gemini[/green]
+        """
+        
+        summary_panel = Panel(
+            summary_text.strip(),
+            title="[bold blue]Documentation Impact[/bold blue]",
+            border_style="blue",
+            padding=(1, 2)
+        )
+        self.console.print(summary_panel)
+        self.console.print()
+
+
+    def _display_documentation_files(self, results: Dict[str, Any]) -> None:
+     """Display generated documentation files"""
+     documentation_files = results.get('documentation_files', [])
+     documentation_details = results.get('documentation_details', [])
+    
+     if documentation_files:
+        files_table = Table(title="📁 Generated Documentation Files", border_style="yellow")
+        files_table.add_column("Source File", style="cyan", width=30)
+        files_table.add_column("Documentation File", style="yellow", width=35)
+        files_table.add_column("Sections", style="green", width=10, justify="center")
+        files_table.add_column("Status", style="white", width=10)
+        
+        for doc_file in documentation_files:
+            file_path = Path(doc_file)
+            
+            # Find matching detail
+            detail = None
+            for d in documentation_details:
+                if d.get('doc_file_path') == doc_file:
+                    detail = d
+                    break
+            
+            source_name = detail.get('file_name', 'N/A') if detail else 'Unknown'
+            section_count = len(detail.get('sections', {})) if detail else 0
+            
+            files_table.add_row(
+                source_name,
+                file_path.name,
+                str(section_count),
+                "✅"
+            )
+        
+        self.console.print(files_table)
+        self.console.print()
+        
+        # Show file tree
+        if documentation_files:
+            self.console.print("[bold blue]📂 Documentation Structure[/bold blue]\n")
+            
+            doc_tree = Tree(f"📁 {Path(documentation_files[0]).parent}")
+            for doc_file in documentation_files[:5]:  # Show first 5
+                doc_tree.add(f"📄 {Path(doc_file).name}")
+            
+            if len(documentation_files) > 5:
+                doc_tree.add(f"[dim]...and {len(documentation_files) - 5} more file(s)[/dim]")
+            
+            self.console.print(doc_tree)
+            self.console.print()
+
+
+    def _display_documentation_preview(self, results: Dict[str, Any]) -> None:
+     """Display preview of generated documentation"""
+     documentation_details = results.get('documentation_details', [])
+    
+     if documentation_details:
+        self.console.print("[bold blue]📖 Documentation Preview[/bold blue]\n")
+        
+        # Show preview of first documented file
+        for detail in documentation_details[:2]:  # Show first 2
+            file_name = detail.get('file_name', 'Unknown')
+            sections = detail.get('sections', {})
+            documentation = detail.get('documentation', '')
+            
+            # Show sections
+            preview_text = f"""
+[bold cyan]{file_name}[/bold cyan]
+
+[yellow]Sections Generated:[/yellow]
+"""
+            for section_name in sections.keys():
+                preview_text += f"  • {section_name}\n"
+            
+            # Show brief excerpt
+            if documentation:
+                lines = documentation.split('\n')
+                excerpt = '\n'.join(lines[:10])
+                preview_text += f"\n[yellow]Documentation Excerpt:[/yellow]\n[dim]{excerpt}...[/dim]"
+            
+            preview_panel = Panel(
+                preview_text.strip(),
+                title=f"[green]✅ {file_name}[/green]",
+                border_style="green",
+                padding=(1, 2)
+            )
+            self.console.print(preview_panel)
+        
+        if len(documentation_details) > 2:
+            self.console.print(f"[dim]...and {len(documentation_details) - 2} more file(s) documented[/dim]\n")
+
+
+    def _display_documentation_recommendations(self, results: Dict[str, Any]) -> None:
+     """Display documentation recommendations"""
+     files_documented = results.get('files_documented', 0)
+     documentation_files = results.get('documentation_files', [])
+     coverage = results.get('coverage', 0.0)
+    
+     recommendations = []
+    
+     if files_documented > 0:
+        recommendations.append("✅ Review generated documentation for accuracy")
+        recommendations.append("📝 Add team-specific context or examples")
+        recommendations.append("🔗 Link documentation to your project wiki")
+        recommendations.append("📊 Share documentation with your team")
+        recommendations.append("🔄 Update documentation when code changes")
+     else:
+        recommendations.append("⚠️  No documentation generated")
+        recommendations.append("🔍 Check if files meet minimum requirements")
+        recommendations.append("📚 Ensure source code is parseable")
+    
+     if coverage < 100:
+        recommendations.append(f"📈 Improve coverage: Currently at {coverage}%")
+    
+     recommendations.append("🤖 Regenerate docs after code updates")
+     recommendations.append("📖 Use documentation in code reviews")
+    
+     if recommendations:
+        recommendations_text = "\n".join(f"  {rec}" for rec in recommendations)
+        
+        # Add file locations
+        if documentation_files:
+            recommendations_text += f"\n\n[bold blue]📁 Documentation Location:[/bold blue]\n"
+            recommendations_text += f"  [dim]{Path(documentation_files[0]).parent}/[/dim]\n"
+        
+        recommendations_panel = Panel(
+            recommendations_text,
+            title="[blue]💡 Next Steps & Recommendations[/blue]",
+            border_style="blue",
+            padding=(1, 2)
+        )
+        self.console.print(recommendations_panel)
+    
+    # Display success message
+     message = results.get('message')
+     if message:
+        self.console.print(f"\n[bold green]✅ {message}[/bold green]\n")
+
+
+# INTEGRATION INSTRUCTIONS:
+"""
+Add these methods to your OutputAgent class in output_agent.py:
+
+1. Add all the methods above to your OutputAgent class
+
+2. The main method _display_documentation_results() is already called 
+   from your existing display_results() method when service is 'documentation'
+
+3. These methods will properly display:
+   - Documentation overview and statistics
+   - Generated documentation files
+   - Preview of documentation content
+   - Recommendations for next steps
+
+4. All output is formatted beautifully with Rich console
+"""    
