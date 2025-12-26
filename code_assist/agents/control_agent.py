@@ -625,30 +625,35 @@ class ControlAgent:
             'error': f"Testing service failed: {str(e)}",
             'status': 'failed'
         }
+    # 
     def _handle_refactoring_request(self, parsed_data: Dict[str, Any], project_path: str) -> Dict[str, Any]:
-        """Handle refactoring service request"""
-        try:
-            console.print("[bold cyan]  Running Refactoring Services...[/bold cyan]")
-            
-            self.output_agent.display_file_tree(parsed_data, "Files to Refactor")
-            
-            refactor_results = self.refactor_agent.refactor_code(parsed_data)
-            
-            results = {
-                'service': 'Refactoring',
-                'project_path': project_path,
-                'files_analyzed': len(parsed_data),
-                'files_refactored': refactor_results.get('files_refactored', 0),
-                'improvements': refactor_results.get('improvements', []),
-                'status': refactor_results.get('status', 'completed'),
-                'message': refactor_results.get('message', 'Refactoring completed')
-            }
-            
-            return results
-            
-        except Exception as e:
-            return {'error': f"Refactoring service failed: {str(e)}"}
-    
+     """Handle refactoring service request"""
+     try:
+        console.print("[bold cyan]🔧 Running Refactoring Services...[/bold cyan]")
+        
+        self.output_agent.display_file_tree(parsed_data, "Files to Refactor")
+        
+        # ✅ This calls the main refactor_code method
+        refactor_results = self.refactor_agent.refactor_code(parsed_data)
+        
+        # ✅ This passes all the data to output agent
+        results = {
+            'service': 'Refactoring',
+            'project_path': project_path,
+            'files_analyzed': len(parsed_data),
+            'files_refactored': refactor_results.get('files_refactored', 0),
+            'improvements': refactor_results.get('improvements', []),
+            'refactored_files': refactor_results.get('refactored_files', []),  # ✅ Add this
+            'refactoring_details': refactor_results.get('refactoring_details', []),  # ✅ Add this
+            'status': refactor_results.get('status', 'completed'),
+            'message': refactor_results.get('message', 'Refactoring completed')
+        }
+        
+        return results
+        
+     except Exception as e:
+        return {'error': f"Refactoring service failed: {str(e)}"}
+     
     def _handle_debugging_request(self, parsed_data: Dict[str, Any], project_path: str) -> Dict[str, Any]:
         """Handle debugging service request"""
         try:

@@ -788,3 +788,319 @@ class OutputAgent:
         self.console.print("\n[bold yellow]Enter your choice (number):[/bold yellow] ", end="")
 
 
+    def _display_refactoring_results(self, results: Dict[str, Any]) -> None:
+     """Display comprehensive refactoring results"""
+    
+    # 1. Project Summary
+     self._display_refactor_project_summary(results)
+    
+    # 2. Refactoring Statistics
+     self._display_refactor_statistics(results)
+    
+    # 3. Refactored Files
+     self._display_refactored_files(results)
+    
+    # 4. Improvements Made
+     self._display_improvements(results)
+    
+    # 5. Code Smells Fixed
+     self._display_code_smells_fixed(results)
+    
+    # 6. Recommendations
+     self._display_refactoring_recommendations(results)
+
+    def _display_refactor_project_summary(self, results: Dict[str, Any]) -> None:
+     """Display refactoring project overview"""
+     summary_table = Table(title="📋 Refactoring Overview", border_style="cyan")
+     summary_table.add_column("Metric", style="cyan", width=20)
+     summary_table.add_column("Value", style="green", width=30)
+    
+     summary_table.add_row("Project Path", str(results.get('project_path', 'N/A')))
+     summary_table.add_row("Files Analyzed", str(results.get('files_analyzed', 0)))
+     summary_table.add_row("Files Refactored", str(results.get('files_refactored', 0)))
+     summary_table.add_row("Status", results.get('status', 'Unknown'))
+    
+     self.console.print(summary_table)
+     self.console.print()
+
+    def _display_refactor_statistics(self, results: Dict[str, Any]) -> None:
+     """Display refactoring execution statistics"""
+     files_analyzed = results.get('files_analyzed', 0)
+     files_refactored = results.get('files_refactored', 0)
+     improvements = results.get('improvements', [])
+     total_improvements = len(improvements)
+    
+    # Create statistics table
+     stats_table = Table(title="📊 Refactoring Statistics", border_style="green")
+     stats_table.add_column("Metric", style="cyan", width=30)
+     stats_table.add_column("Count", style="white", width=10, justify="right")
+     stats_table.add_column("Details", style="dim", width=25)
+    
+    # Analysis metrics
+     stats_table.add_row(
+        "Files Analyzed", 
+        str(files_analyzed), 
+        "source code files"
+     )
+     stats_table.add_row(
+        "Files Refactored", 
+        str(files_refactored), 
+        "✅ Successfully refactored" if files_refactored > 0 else "⚠️  None"
+     )
+    
+    # Separator
+     stats_table.add_row("", "", "")
+    
+    # Improvement metrics
+     stats_table.add_row(
+        "Total Improvements", 
+        str(total_improvements), 
+        "code quality enhancements"
+     )
+    
+    # Calculate success rate
+     if files_analyzed > 0:
+        refactor_rate = (files_refactored / files_analyzed) * 100
+        status = "🎉 Excellent" if refactor_rate >= 80 else "✅ Good" if refactor_rate >= 50 else "⚠️  Needs Review"
+        stats_table.add_row("Refactoring Rate", f"{refactor_rate:.1f}%", status)
+    
+    # Average improvements per file
+     if files_refactored > 0:
+        avg_improvements = total_improvements / files_refactored
+        stats_table.add_row(
+            "Avg Improvements/File", 
+            f"{avg_improvements:.1f}", 
+            "per refactored file"
+        )
+    
+     self.console.print(stats_table)
+     self.console.print()
+    
+    # Add visual summary panel
+     if files_refactored > 0:
+        refactor_rate = (files_refactored / files_analyzed * 100) if files_analyzed > 0 else 0
+        rate_color = "green" if refactor_rate >= 80 else "yellow"
+        
+        summary_text = f"""
+[bold cyan]🔧 Refactoring Summary[/bold cyan]
+
+• Analyzed [yellow]{files_analyzed} file(s)[/yellow]
+• Refactored [green]{files_refactored} file(s)[/green]
+• Applied [blue]{total_improvements} improvement(s)[/blue]
+• Success Rate: [{rate_color}]{refactor_rate:.1f}%[/{rate_color}]
+• Quality Impact: [green]Positive[/green]
+        """
+        
+        summary_panel = Panel(
+            summary_text.strip(),
+            title="[bold blue]Refactoring Impact[/bold blue]",
+            border_style="blue",
+            padding=(1, 2)
+        )
+        self.console.print(summary_panel)
+        self.console.print()
+
+    def _display_refactored_files(self, results: Dict[str, Any]) -> None:
+     """Display refactored files with details"""
+     refactored_files = results.get('refactored_files', [])
+     refactoring_details = results.get('refactoring_details', [])
+    
+     if refactored_files:
+        files_table = Table(title="📁 Refactored Files", border_style="yellow")
+        files_table.add_column("Original File", style="cyan", width=30)
+        files_table.add_column("Refactored File", style="yellow", width=30)
+        files_table.add_column("Improvements", style="green", width=15, justify="center")
+        files_table.add_column("Status", style="white", width=10)
+        
+        for refactor_file in refactored_files:
+            file_path = Path(refactor_file)
+            
+            # Find matching detail
+            detail = None
+            for d in refactoring_details:
+                if d.get('refactored_file') == refactor_file:
+                    detail = d
+                    break
+            
+            original_name = detail.get('file_name', 'N/A') if detail else Path(refactor_file).stem.replace('_refactored', '')
+            improvement_count = len(detail.get('improvements', [])) if detail else 0
+            
+            files_table.add_row(
+                original_name,
+                file_path.name,
+                str(improvement_count),
+                "✅"
+            )
+        
+        self.console.print(files_table)
+        self.console.print()
+        
+        # Show detailed file information
+        if refactoring_details:
+            self.console.print("[bold blue]📄 Detailed File Analysis[/bold blue]\n")
+            
+            for detail in refactoring_details[:3]:  # Show top 3 detailed
+                file_name = detail.get('file_name', 'Unknown')
+                lines_before = detail.get('lines_before', 0)
+                lines_after = detail.get('lines_after', 0)
+                code_smells = detail.get('code_smells', [])
+                
+                # Calculate reduction
+                line_diff = lines_before - lines_after
+                reduction_pct = (line_diff / lines_before * 100) if lines_before > 0 else 0
+                
+                detail_text = f"""
+[bold cyan]{file_name}[/bold cyan]
+
+[yellow]Before:[/yellow] {lines_before} lines
+[green]After:[/green] {lines_after} lines
+[blue]Reduction:[/blue] {line_diff} lines ({reduction_pct:.1f}%)
+
+[yellow]Issues Fixed:[/yellow] {len(code_smells)}
+                """
+                
+                detail_panel = Panel(
+                    detail_text.strip(),
+                    title=f"[green]✅ {file_name}[/green]",
+                    border_style="green",
+                    padding=(1, 2)
+                )
+                self.console.print(detail_panel)
+            
+            if len(refactoring_details) > 3:
+                self.console.print(f"[dim]...and {len(refactoring_details) - 3} more file(s)[/dim]\n")
+
+    def _display_improvements(self, results: Dict[str, Any]) -> None:
+     """Display all improvements made during refactoring"""
+     improvements = results.get('improvements', [])
+    
+     if improvements:
+        improvements_table = Table(
+            title="✨ Improvements Applied", 
+            border_style="green",
+            show_lines=True
+        )
+        improvements_table.add_column("#", style="cyan", width=5, justify="center")
+        improvements_table.add_column("Improvement", style="white", width=60)
+        improvements_table.add_column("Impact", style="green", width=15)
+        
+        # Categorize improvements by impact
+        for i, improvement in enumerate(improvements[:15], 1):  # Show top 15
+            # Determine impact based on keywords
+            impact = "🟢 High"
+            if any(word in improvement.lower() for word in ['minor', 'small', 'slight']):
+                impact = "🟡 Medium"
+            elif any(word in improvement.lower() for word in ['major', 'significant', 'critical']):
+                impact = "🔴 Critical"
+            
+            improvements_table.add_row(str(i), improvement, impact)
+        
+        self.console.print(improvements_table)
+        
+        if len(improvements) > 15:
+            self.console.print(f"[dim]...and {len(improvements) - 15} more improvement(s)[/dim]")
+        
+        self.console.print()
+
+    def _display_code_smells_fixed(self, results: Dict[str, Any]) -> None:
+     """Display code smells that were identified and fixed"""
+     refactoring_details = results.get('refactoring_details', [])
+    
+    # Collect all code smells - ✅ PROPERLY HANDLE DICT FORMAT
+     all_smells = []
+     for detail in refactoring_details:
+        smells = detail.get('code_smells', [])
+        file_name = detail.get('file_name', 'Unknown')
+        for smell in smells:
+            # ✅ FIX: Extract description from dict
+            if isinstance(smell, dict):
+                smell_desc = smell.get('description', 'No description')
+                severity = smell.get('severity', 'medium')
+            elif isinstance(smell, str):
+                smell_desc = smell
+                severity = 'medium'
+            else:
+                smell_desc = str(smell)
+                severity = 'medium'
+            
+            all_smells.append({
+                'file': file_name,
+                'description': smell_desc,  # ✅ NOW IT'S A STRING
+                'severity': severity
+            })
+    
+     if all_smells:
+        smells_table = Table(
+            title="🔍 Code Smells Fixed", 
+            border_style="red",
+            show_lines=True
+        )
+        smells_table.add_column("File", style="yellow", width=20)
+        smells_table.add_column("Issue", style="red", width=40)
+        smells_table.add_column("Severity", style="cyan", width=12)
+        smells_table.add_column("Status", style="green", width=10)
+        
+        for smell_data in all_smells[:10]:  # Show top 10
+            # Add severity indicator
+            severity = smell_data.get('severity', 'medium').upper()
+            severity_icon = {
+                'HIGH': '🔴',
+                'MEDIUM': '🟡',
+                'LOW': '🟢'
+            }.get(severity, '⚪')
+            
+            smells_table.add_row(
+                smell_data['file'],
+                smell_data['description'],  # ✅ NOW RENDERS AS STRING
+                f"{severity_icon} {severity}",
+                "✅ Fixed"
+            )
+        
+        self.console.print(smells_table)
+        
+        if len(all_smells) > 10:
+            self.console.print(f"[dim]...and {len(all_smells) - 10} more issue(s) fixed[/dim]")
+        
+        self.console.print()
+
+    def _display_refactoring_recommendations(self, results: Dict[str, Any]) -> None:
+     """Display refactoring recommendations and next steps"""
+     files_refactored = results.get('files_refactored', 0)
+     refactored_files = results.get('refactored_files', [])
+    
+     recommendations = []
+    
+     if files_refactored > 0:
+        recommendations.append("✅ Review the refactored code in the generated files")
+        recommendations.append("🧪 Run comprehensive tests on refactored code")
+        recommendations.append("📝 Compare original vs refactored code side-by-side")
+        recommendations.append("🔄 Apply refactored code to your project")
+        recommendations.append("📊 Monitor performance impact after refactoring")
+     else:
+        recommendations.append("✨ Your code is already well-structured!")
+        recommendations.append("📚 Consider adding more comprehensive documentation")
+        recommendations.append("🧪 Increase test coverage for better code quality")
+    
+     recommendations.append("🔍 Schedule regular code quality reviews")
+     recommendations.append("📈 Track code quality metrics over time")
+    
+     if recommendations:
+        recommendations_text = "\n".join(f"  {rec}" for rec in recommendations)
+        
+        # Add file locations
+        if refactored_files:
+            recommendations_text += f"\n\n[bold blue]📁 Refactored Files Location:[/bold blue]\n"
+            recommendations_text += f"  [dim]{Path(refactored_files[0]).parent}/[/dim]\n"
+        
+        recommendations_panel = Panel(
+            recommendations_text,
+            title="[blue]💡 Next Steps & Recommendations[/blue]",
+            border_style="blue",
+            padding=(1, 2)
+        )
+        self.console.print(recommendations_panel)
+    
+    # Display message if available
+     message = results.get('message')
+     if message:
+        self.console.print(f"\n[bold green]✅ {message}[/bold green]\n")
