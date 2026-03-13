@@ -138,14 +138,13 @@ class OutputAgent:
         # Test Files Generated
         self._display_test_files(results)
         
-        # Detailed Execution Results
-        self._display_execution_details(results)
+        # # Detailed Execution Results
+        # self._display_execution_details(results)
         
         # Errors and Warnings
         self._display_errors_and_warnings(results)
         
-        # Recommendations
-        self._display_testing_recommendations(results)
+       
     
     def _display_project_summary(self, results: Dict[str, Any]) -> None:
         """Display project overview"""
@@ -375,47 +374,47 @@ class OutputAgent:
             self.console.print(files_table)
             self.console.print()
     
-    def _display_execution_details(self, results: Dict[str, Any]) -> None:
-        """Display detailed execution results for each file"""
-        execution_results = results.get('execution_results', {})
+    # def _display_execution_details(self, results: Dict[str, Any]) -> None:
+    #     """Display detailed execution results for each file"""
+    #     execution_results = results.get('execution_results', {})
         
-        if execution_results:
-            self.console.print("[bold blue]🔍 Detailed Execution Results[/bold blue]")
+    #     if execution_results:
+    #         self.console.print("[bold blue]🔍 Detailed Execution Results[/bold blue]")
             
-            for file_path, exec_result in execution_results.items():
-                file_name = Path(file_path).name
+    #         for file_path, exec_result in execution_results.items():
+    #             file_name = Path(file_path).name
                 
-                # Create panel for each file
-                if exec_result.get('success', False):
-                    status_color = "green"
-                    status_icon = "✅"
-                else:
-                    status_color = "red"
-                    status_icon = "❌"
+    #             # Create panel for each file
+    #             if exec_result.get('success', False):
+    #                 status_color = "green"
+    #                 status_icon = "✅"
+    #             else:
+    #                 status_color = "red"
+    #                 status_icon = "❌"
                 
-                # File execution summary
-                summary_text = f"[{status_color}]{status_icon} {file_name}[/{status_color}]\n"
-                summary_text += f"Passed: {exec_result.get('passed', 0)} | "
-                summary_text += f"Failed: {exec_result.get('failed', 0)} | "
-                summary_text += f"Total: {exec_result.get('total', 0)}\n"
+    #             # File execution summary
+    #             summary_text = f"[{status_color}]{status_icon} {file_name}[/{status_color}]\n"
+    #             summary_text += f"Passed: {exec_result.get('passed', 0)} | "
+    #             summary_text += f"Failed: {exec_result.get('failed', 0)} | "
+    #             summary_text += f"Total: {exec_result.get('total', 0)}\n"
                 
-                if exec_result.get('duration'):
-                    summary_text += f"Duration: {exec_result['duration']:.2f}s"
+    #             if exec_result.get('duration'):
+    #                 summary_text += f"Duration: {exec_result['duration']:.2f}s"
                 
-                # Show errors if any
-                if exec_result.get('stderr'):
-                    summary_text += f"\n[red]Errors:[/red]\n{exec_result['stderr'][:200]}..."
+    #             # Show errors if any
+    #             if exec_result.get('stderr'):
+    #                 summary_text += f"\n[red]Errors:[/red]\n{exec_result['stderr'][:200]}..."
                 
-                file_panel = Panel(
-                    summary_text,
-                    title=f"[{status_color}]{file_name}[/{status_color}]",
-                    border_style=status_color,
-                    padding=(0, 1)
-                )
+    #             file_panel = Panel(
+    #                 summary_text,
+    #                 title=f"[{status_color}]{file_name}[/{status_color}]",
+    #                 border_style=status_color,
+    #                 padding=(0, 1)
+    #             )
                 
-                self.console.print(file_panel)
+    #             self.console.print(file_panel)
             
-            self.console.print()
+    #         self.console.print()
     
     def _display_errors_and_warnings(self, results: Dict[str, Any]) -> None:
         """Display errors and warnings"""
@@ -436,35 +435,15 @@ class OutputAgent:
             self.console.print(error_table)
             self.console.print()
     
-    def _display_testing_recommendations(self, results: Dict[str, Any]) -> None:
-        """Display testing recommendations and next steps"""
-        passed = results.get('tests_passed', 0)
-        failed = results.get('tests_failed', 0)
-        total = passed + failed
+    
         
-        recommendations = []
         
-        if total == 0:
-            recommendations.append("• Generate more comprehensive test cases")
-            recommendations.append("• Check if test frameworks are properly installed")
-        elif failed > 0:
-            recommendations.append("• Review and fix failing test cases")
-            recommendations.append("• Check for missing dependencies or imports")
         
-        if passed > 0:
-            recommendations.append("• Consider adding edge case tests")
-            recommendations.append("• Add performance and integration tests")
         
-        recommendations.append("• Set up continuous integration for automated testing")
+            
         
-        if recommendations:
-            recommendations_text = "\n".join(recommendations)
-            recommendations_panel = Panel(
-                recommendations_text,
-                title="[blue]💡 Recommendations[/blue]",
-                border_style="blue"
-            )
-            self.console.print(recommendations_panel)
+       
+        
     
     def _display_refactoring_results(self, results: Dict[str, Any]) -> None:
         """Display refactoring service results"""

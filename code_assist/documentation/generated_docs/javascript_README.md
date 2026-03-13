@@ -8,102 +8,110 @@ Generated on: code_assist
 # javascript.js - Documentation
 
 ## File Overview
-- **What this file does**: This file contains a collection of simple, independent JavaScript utility functions. Each function performs a specific, common logical check or calculation based on its input.
-- **Main responsibility**: The primary responsibility of this file is to provide reusable functions for basic conditional logic, comparisons, and status determinations.
-- **Purpose in the larger system**: In a broader application context, these functions could serve as foundational helpers for input validation, user interface logic, data processing, or status management, promoting modularity and reducing code duplication for recurring tasks.
+This file contains a collection of simple JavaScript utility functions designed to perform basic conditional checks and calculations. Each function addresses a distinct common use case, such as determining if a number is even or odd, finding the maximum of two numbers, checking eligibility, calculating grades, or verifying login status.
+
+**Main responsibility**: To provide straightforward, reusable functions for common conditional logic operations.
+
+**Purpose in the larger system**: These functions serve as foundational examples or basic building blocks that could be integrated into larger applications requiring these specific checks, or used as pedagogical examples for understanding JavaScript functions and conditional statements.
 
 ## Key Components
 
 ### Functions
 
--   **`checkEvenOdd(num)`**:
-    -   **Purpose and functionality**: This function determines whether a given integer is an "Even number" or an "Odd number" by checking if it's perfectly divisible by 2.
-    -   **Parameters**: `num` (Number): The integer value to be evaluated.
-    -   **Returns**: (String): Returns `"Even number"` if `num` is even, otherwise returns `"Odd number"`.
-    -   **Usage Example**:
-        ```javascript
-        console.log(checkEvenOdd(4)); // Returns "Even number"
-        ```
-
--   **`findMax(a, b)`**:
-    -   **Purpose and functionality**: This function compares two numerical inputs and returns the larger of the two values.
+-   **`checkEvenOdd(num)`**: Purpose and functionality
+    This function determines whether a given number is even or odd. It uses the modulo operator (`%`) to check if the number has a remainder of 0 when divided by 2.
     -   **Parameters**:
-        -   `a` (Number): The first number for comparison.
-        -   `b` (Number): The second number for comparison.
-    -   **Returns**: (Number): Returns the greater value between `a` and `b`.
+        -   `num` (number): The number to be checked.
+    -   **Returns**:
+        -   (string): Returns `"Even number"` if `num` is even, otherwise returns `"Odd number"`.
     -   **Usage Example**:
         ```javascript
-        console.log(findMax(15, 7)); // Returns 15
+        console.log(checkEvenOdd(4)); // Expected output: "Even number"
+        console.log(checkEvenOdd(7)); // Expected output: "Odd number"
         ```
 
--   **`canVote(age)`**:
-    -   **Purpose and functionality**: This function checks if an individual is eligible to vote based on their age. The eligibility criterion is an age of 18 or greater.
-    -   **Parameters**: `age` (Number): The age of the person to check.
-    -   **Returns**: (String): Returns `"Eligible to vote"` if `age` is 18 or more, otherwise returns `"Not eligible to vote"`.
+-   **`findMax(a, b)`**: Purpose and functionality
+    This function compares two numbers and returns the larger of the two.
+    -   **Parameters**:
+        -   `a` (number): The first number to compare.
+        -   `b` (number): The second number to compare.
+    -   **Returns**:
+        -   (number): Returns the larger of `a` and `b`. If they are equal, it returns `b`.
     -   **Usage Example**:
         ```javascript
-        console.log(canVote(22)); // Returns "Eligible to vote"
+        console.log(findMax(10, 5)); // Expected output: 10
+        console.log(findMax(3, 8));  // Expected output: 8
         ```
 
--   **`calculateGrade(marks)`**:
-    -   **Purpose and functionality**: This function assigns a letter grade based on a numerical `marks` input, according to a predefined grading scale.
-    -   **Parameters**: `marks` (Number): The numerical score or marks obtained.
-    -   **Returns**: (String): Returns a grade string: `"A Grade"` (for marks >= 90), `"B Grade"` (for marks >= 75), `"C Grade"` (for marks >= 50), or `"Fail"` (for marks < 50).
+-   **`canVote(age)`**: Purpose and functionality
+    This function determines if an individual is eligible to vote based on their age. It checks if the provided age is 18 or greater.
+    -   **Parameters**:
+        -   `age` (number): The age of the individual.
+    -   **Returns**:
+        -   (string): Returns `"Eligible to vote"` if `age` is 18 or higher, otherwise returns `"Not eligible to vote"`.
     -   **Usage Example**:
         ```javascript
-        console.log(calculateGrade(78)); // Returns "B Grade"
+        console.log(canVote(20)); // Expected output: "Eligible to vote"
+        console.log(canVote(17)); // Expected output: "Not eligible to vote"
         ```
 
--   **`loginStatus(isLoggedIn)`**:
-    -   **Purpose and functionality**: This function provides a human-readable string indicating a user's login status based on a boolean input.
-    -   **Parameters**: `isLoggedIn` (Boolean): A flag where `true` means logged in, and `false` means logged out.
-    -   **Returns**: (String): Returns `"User is logged in"` if `isLoggedIn` is `true`, otherwise returns `"User is logged out"`.
+-   **`calculateGrade(marks)`**: Purpose and functionality
+    This function calculates a student's grade based on their marks, using a predefined grading scale.
+    -   **Parameters**:
+        -   `marks` (number): The marks obtained by the student (assumed to be between 0 and 100).
+    -   **Returns**:
+        -   (string): Returns a grade string (`"A Grade"`, `"B Grade"`, `"C Grade"`, or `"Fail"`) corresponding to the marks.
     -   **Usage Example**:
         ```javascript
-        console.log(loginStatus(false)); // Returns "User is logged out"
+        console.log(calculateGrade(95)); // Expected output: "A Grade"
+        console.log(calculateGrade(70)); // Expected output: "C Grade"
+        console.log(calculateGrade(45)); // Expected output: "Fail"
+        ```
+
+-   **`loginStatus(isLoggedIn)`**: Purpose and functionality
+    This function checks and reports a user's login status based on a boolean input.
+    -   **Parameters**:
+        -   `isLoggedIn` (boolean): A boolean value indicating whether the user is currently logged in (`true`) or not (`false`).
+    -   **Returns**:
+        -   (string): Returns `"User is logged in"` if `isLoggedIn` is `true`, otherwise returns `"User is logged out"`.
+    -   **Usage Example**:
+        ```javascript
+        console.log(loginStatus(true));  // Expected output: "User is logged in"
+        console.log(loginStatus(false)); // Expected output: "User is logged out"
         ```
 
 ### Classes
--   This file does not define any JavaScript classes.
+(No classes are defined in this file.)
 
 ## Execution Flow
-The `javascript.js` file defines five distinct functions first. After these function declarations, the script proceeds to execute a series of `console.log()` statements. Each `console.log()` statement calls one of the defined functions with specific arguments, and then prints the returned value directly to the console. The code runs sequentially from top to bottom, defining all functions before demonstrating their usage. There are no explicit entry points beyond these direct function calls.
+The script first defines five independent functions. After the function definitions, the code proceeds to call each of these functions one by one with specific arguments. The return value of each function call is then immediately printed to the console using `console.log()`. This demonstrates the functionality of each function sequentially.
 
 ## Dependencies
--   This file has no external dependencies. It relies solely on standard JavaScript language features and built-in operators.
+This file has no external dependencies. All functionality is implemented using standard JavaScript features.
 
 ## Important Notes
--   All functions are designed for synchronous execution and return their results immediately.
--   The `checkEvenOdd` function might produce "Odd number" for non-integer inputs like `checkEvenOdd(3.5)` because `3.5 % 2` evaluates to `1.5`, which is not strictly `0`. It's best used with integer inputs.
--   The `calculateGrade` function's logic is order-dependent; the `if-else if` structure ensures that higher grade thresholds are checked first.
--   These functions are basic utilities and do not include error handling for invalid input types (e.g., passing a string to `checkEvenOdd`).
+-   **Input Assumptions**: The functions assume valid input types (e.g., `num` for `checkEvenOdd` is a number, `isLoggedIn` for `loginStatus` is a boolean). Providing incorrect types might lead to unexpected behavior or errors.
+-   **Grading Scale**: The `calculateGrade` function uses a fixed grading scale. Any changes to grading criteria would require modification of this function.
+-   **Simplicity**: These functions are designed for clarity and simplicity, focusing on single, specific tasks.
 
 ## Usage Example
 ```javascript
-// This section demonstrates how to use the functions defined in javascript.js
+// Demonstrates calling each function and logging its result
 
-// Using checkEvenOdd to determine if 7 is even or odd
-console.log(checkEvenOdd(7));
+// Check if a number is even or odd
+console.log(checkEvenOdd(7));    // Output: Odd number
 
-// Using findMax to get the larger of 10 and 20
-console.log(findMax(10, 20));
+// Find the maximum of two numbers
+console.log(findMax(10, 20));    // Output: 20
 
-// Using canVote to check voting eligibility for age 16
-console.log(canVote(16));
+// Check voting eligibility
+console.log(canVote(16));        // Output: Not eligible to vote
 
-// Using calculateGrade to get the grade for marks 82
-console.log(calculateGrade(82));
+// Calculate grade based on marks
+console.log(calculateGrade(82)); // Output: B Grade
 
-// Using loginStatus to check the status when logged in (true)
-console.log(loginStatus(true));
-
-// Additional examples for comprehensive understanding:
-console.log("\n--- More Examples ---");
-console.log("Check Even/Odd for 10:", checkEvenOdd(10));
-console.log("Max of 100 and 50:", findMax(100, 50));
-console.log("Can vote at age 20:", canVote(20));
-console.log("Grade for 45 marks:", calculateGrade(45));
-console.log("Login status (false):", loginStatus(false));
+// Check login status
+console.log(loginStatus(true));  // Output: User is logged in
 ```
 
 ---

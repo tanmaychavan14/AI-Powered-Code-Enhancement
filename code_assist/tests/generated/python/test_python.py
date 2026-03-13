@@ -1,145 +1,62 @@
-# Example Python functions with different operations
-
-# Reverse a string
-def reverse_string(text):
-    return text[::-1]
-
-# Count words in a string
-def word_count(text):
-    return len(text.split())
-
-# Convert string to uppercase
-def to_upper(text):
-    return text.upper()
-
-# Check if a number is even
-def is_even(num):
-    return num % 2 == 0
-
-# Generate a list of numbers from start to end
-def generate_numbers(start, end):
-    return list(range(start, end + 1))
-
-
-# Pytest test cases start here
-
+import math
 import pytest
 
-# --- Tests for reverse_string(text) ---
+# Copy ALL function implementations at the top
+def calculate_square_root(number):
+    result = math.sqrt(number)
+    return result
 
-def test_reverse_string_normal():
-    """Test with a standard multi-word string."""
-    assert reverse_string("Hello World") == "dlroW olleH"
+# No need to test the global variable assignment or print statement.
+# Only functions are to be tested.
 
-def test_reverse_string_single_word():
-    """Test with a single word string."""
-    assert reverse_string("Python") == "nohtyP"
+# Test cases for calculate_square_root(number)
+def test_calculate_square_root_positive_integer():
+    """Test with a positive integer perfect square."""
+    assert calculate_square_root(25) == 5.0
+    assert isinstance(calculate_square_root(25), float)
 
-def test_reverse_string_empty():
-    """Test with an empty string."""
-    assert reverse_string("") == ""
+def test_calculate_square_root_positive_float():
+    """Test with a positive float number."""
+    assert calculate_square_root(9.0) == 3.0
+    assert isinstance(calculate_square_root(9.0), float)
 
-def test_reverse_string_palindrome():
-    """Test with a string that is a palindrome."""
-    assert reverse_string("madam") == "madam"
+def test_calculate_square_root_zero():
+    """Test with zero."""
+    assert calculate_square_root(0) == 0.0
+    assert isinstance(calculate_square_root(0), float)
 
-def test_reverse_string_with_numbers_and_special_chars():
-    """Test with a string containing numbers and special characters."""
-    assert reverse_string("123!@#abc") == "cba#@!321"
+def test_calculate_square_root_one():
+    """Test with one."""
+    assert calculate_square_root(1) == 1.0
+    assert isinstance(calculate_square_root(1), float)
 
-# --- Tests for word_count(text) ---
+def test_calculate_square_root_non_perfect_square():
+    """Test with a non-perfect square, checking for approximate value."""
+    expected_value = 1.4142135623730951
+    assert calculate_square_root(2) == pytest.approx(expected_value)
+    assert isinstance(calculate_square_root(2), float)
 
-def test_word_count_multiple_words():
-    """Test with a standard string containing multiple words."""
-    assert word_count("This is a test sentence") == 5
+def test_calculate_square_root_large_number():
+    """Test with a large number."""
+    assert calculate_square_root(1000000) == 1000.0
+    assert isinstance(calculate_square_root(1000000), float)
 
-def test_word_count_single_word():
-    """Test with a string containing only one word."""
-    assert word_count("word") == 1
+def test_calculate_square_root_negative_number_raises_value_error():
+    """Test that a negative number raises a ValueError."""
+    with pytest.raises(ValueError, match="math domain error"):
+        calculate_square_root(-9)
 
-def test_word_count_empty_string():
-    """Test with an empty string."""
-    assert word_count("") == 0
+def test_calculate_square_root_non_numeric_input_raises_type_error():
+    """Test that a non-numeric input (string) raises a TypeError."""
+    with pytest.raises(TypeError):
+        calculate_square_root("hello")
 
-def test_word_count_only_spaces():
-    """Test with a string consisting only of spaces."""
-    assert word_count("   ") == 0
+def test_calculate_square_root_list_input_raises_type_error():
+    """Test that a non-numeric input (list) raises a TypeError."""
+    with pytest.raises(TypeError):
+        calculate_square_root([4])
 
-def test_word_count_with_leading_trailing_multiple_spaces():
-    """Test with extra spaces between words and at ends."""
-    assert word_count("  hello   world   python  ") == 3
-
-def test_word_count_with_punctuation():
-    """Test with punctuation that is part of words."""
-    assert word_count("Hello, world! How are you?") == 5 # "Hello,", "world!", "How", "are", "you?"
-
-# --- Tests for to_upper(text) ---
-
-def test_to_upper_lowercase_string():
-    """Test converting a fully lowercase string to uppercase."""
-    assert to_upper("hello world") == "HELLO WORLD"
-
-def test_to_upper_mixed_case_string():
-    """Test converting a mixed-case string to uppercase."""
-    assert to_upper("PyThOn Is FuN") == "PYTHON IS FUN"
-
-def test_to_upper_already_uppercase_string():
-    """Test with a string already in uppercase."""
-    assert to_upper("HELLO") == "HELLO"
-
-def test_to_upper_empty_string():
-    """Test with an empty string."""
-    assert to_upper("") == ""
-
-def test_to_upper_with_numbers_and_special_chars():
-    """Test with a string containing numbers and special characters."""
-    assert to_upper("123!@#abc") == "123!@#ABC"
-
-# --- Tests for is_even(num) ---
-
-def test_is_even_positive_even():
-    """Test a positive even number."""
-    assert is_even(4) is True
-
-def test_is_even_positive_odd():
-    """Test a positive odd number."""
-    assert is_even(7) is False
-
-def test_is_even_zero():
-    """Test zero, which is considered even."""
-    assert is_even(0) is True
-
-def test_is_even_negative_even():
-    """Test a negative even number."""
-    assert is_even(-2) is True
-
-def test_is_even_negative_odd():
-    """Test a negative odd number."""
-    assert is_even(-5) is False
-
-# --- Tests for generate_numbers(start, end) ---
-
-def test_generate_numbers_positive_range():
-    """Test a standard positive range."""
-    assert generate_numbers(1, 5) == [1, 2, 3, 4, 5]
-
-def test_generate_numbers_single_number_range():
-    """Test when start and end are the same."""
-    assert generate_numbers(7, 7) == [7]
-
-def test_generate_numbers_empty_range():
-    """Test when start is greater than end, resulting in an empty list."""
-    assert generate_numbers(5, 1) == []
-
-def test_generate_numbers_range_with_negative_numbers():
-    """Test a range that includes negative numbers."""
-    assert generate_numbers(-3, 1) == [-3, -2, -1, 0, 1]
-
-def test_generate_numbers_range_crossing_zero():
-    """Test a range that crosses the zero mark."""
-    assert generate_numbers(-2, 2) == [-2, -1, 0, 1, 2]
-
-def test_generate_numbers_large_range():
-    """Test a moderately large range to ensure performance/correctness."""
-    expected = list(range(0, 101))
-    assert generate_numbers(0, 100) == expected
+def test_calculate_square_root_complex_number_raises_type_error():
+    """Test that a complex number raises a TypeError."""
+    with pytest.raises(TypeError):
+        calculate_square_root(2 + 3j)

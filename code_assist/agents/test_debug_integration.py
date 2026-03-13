@@ -188,25 +188,25 @@ class TestDebugCoordinator:
             console.print(f"   • Fixes Generated: {debug_results.get('fixes_generated', 0)}")
             console.print(f"   • Fixed Functions: {', '.join(debug_results.get('fixed_functions', []))}")
         
-        # Next steps
-        next_steps = """
-[bold yellow]📋 Next Steps:[/bold yellow]
+#         # Next steps
+#         next_steps = """
+# [bold yellow]📋 Next Steps:[/bold yellow]
 
-1. Review generated fixes in [cyan]debug/fixes/[/cyan]
-2. Apply fixes to your source code
-3. Re-run tests to verify fixes
-4. Iterate if needed
+# 1. Review generated fixes in [cyan]debug/fixes/[/cyan]
+# 2. Apply fixes to your source code
+# 3. Re-run tests to verify fixes
+# 4. Iterate if needed
 
-[dim]Tip: You can re-run the debug agent anytime with the 'debug' command[/dim]
-"""
+# [dim]Tip: You can re-run the debug agent anytime with the 'debug' command[/dim]
+# """
         
-        next_steps_panel = Panel(
-            next_steps,
-            title="[bold]What's Next?[/bold]",
-            border_style="green"
-        )
+#         next_steps_panel = Panel(
+#             next_steps,
+#             title="[bold]What's Next?[/bold]",
+#             border_style="green"
+#         )
         
-        console.print(next_steps_panel)
+#         console.print(next_steps_panel)
 
 
 # Integration into Control Agent

@@ -1300,73 +1300,180 @@ class TestAgent:
             for cls in classes:
                 console.print(f"  • {cls['name']}")
     
-    def _extract_failure_details(self, exec_result: Dict, functions: List[Dict], 
-                                 classes: List[Dict], file_path: str) -> Dict[str, Any]:
-        """Extract detailed failure information from pytest output - FIXED VERSION"""
-        failed_info = {
-            'failed_tests': [],
-            'functions': []
-        }
-        
-        output = exec_result.get('output', '')
-        
-        console.print(f"[dim]DEBUG: Analyzing pytest output for failures[/dim]")
-        console.print(f"[dim]DEBUG: Output length: {len(output)} chars[/dim]")
-        
-        # ✅ CORRECT PATTERN: Extract from pytest output format:
-        # tests\generated\python\test_python.py::test_reverse_string_empty FAILED
-        # The pattern after :: and before FAILED is the actual test function name
-        
-        failed_pattern = r'::([a-zA-Z_][a-zA-Z0-9_]*)\s+(?:FAILED|ERROR)'
+    # ------------------------------------------------------------------ #
+    #  DROP-IN REPLACEMENT for _extract_failure_details in TestAgent
+    # ------------------------------------------------------------------ #
+
+    def _extract_failure_details(
+        self,
+        exec_result: Dict,
+        functions: List[Dict],
+        classes: List[Dict],
+        file_path: str,
+    ) -> Dict[str, Any]:
+        """
+        Extract detailed failure information from test runner output.
+
+        Works for BOTH pytest (text pattern matching) and Jest
+        (structured failed_tests list from JestRunner).
+        """
+        failed_info: Dict[str, Any] = {"failed_tests": [], "functions": []}
+
+        # ── Jest path ──────────────────────────────────────────────────
+        # JestRunner now always sets runner="jest" AND provides a
+        # structured "failed_tests" list, so we use that directly.
+        if exec_result.get("runner") == "jest":
+            raw_failures: List[Dict] = exec_result.get("failed_tests", [])
+
+            console.print(
+                f"[dim]DEBUG (Jest): {len(raw_failures)} structured failure(s) received[/dim]"
+            )
+
+            for test in raw_failures:
+                title: str = test.get("title", "Unknown")
+                failure_msg: str = (
+                    test.get("failureMessages", [""])[0][:200]
+                    if test.get("failureMessages")
+                    else "No failure message"
+                )
+
+                # Map the Jest test title back to a source function name
+                # e.g. "should return empty string for reverseString"  → reverseString
+                original_function = self._match_jest_title_to_function(
+                    title, test.get("ancestorTitles", []), functions
+                )
+
+                console.print(
+                    f"[dim]DEBUG (Jest): '{title}' → function '{original_function}'[/dim]"
+                )
+
+                failed_info["failed_tests"].append(
+                    {
+                        "test_name": title,
+                        "original_function": original_function,
+                        "file": file_path,
+                        "error_snippet": failure_msg,
+                    }
+                )
+
+                if (
+                    original_function
+                    and original_function != "Unknown"
+                    and original_function not in failed_info["functions"]
+                ):
+                    failed_info["functions"].append(original_function)
+
+            console.print(
+                f"[green]DEBUG (Jest): "
+                f"{len(failed_info['failed_tests'])} failed tests extracted, "
+                f"affected functions: {failed_info['functions']}[/green]"
+            )
+            return failed_info
+
+        # ── Pytest path (unchanged) ────────────────────────────────────
+        output = exec_result.get("output", "")
+
+        console.print(
+            f"[dim]DEBUG (pytest): Analysing output ({len(output)} chars)[/dim]"
+        )
+
+        failed_pattern = r"::([a-zA-Z_][a-zA-Z0-9_]*)\s+(?:FAILED|ERROR)"
         matches = re.findall(failed_pattern, output)
-        
-        console.print(f"[dim]DEBUG: Found {len(matches)} failed test function names: {matches}[/dim]")
-        
-        # If no matches, try alternate patterns
+
         if not matches:
-            # Try simpler pattern for different pytest output formats
-            failed_pattern = r'(test_[a-zA-Z0-9_]+)\s+FAILED'
+            failed_pattern = r"(test_[a-zA-Z0-9_]+)\s+FAILED"
             matches = re.findall(failed_pattern, output)
-            console.print(f"[dim]DEBUG: Trying alternate pattern, found: {matches}[/dim]")
-        
-        # Remove duplicates while preserving order
-        seen_tests = set()
+            console.print(
+                f"[dim]DEBUG (pytest): Trying alternate pattern, found: {matches}[/dim]"
+            )
+
+        seen_tests: set = set()
+        unique_matches = [m for m in matches if not (seen_tests.add(m) or m in seen_tests)]  # type: ignore[func-returns-value]
+        # simpler dedup
+        seen: set = set()
         unique_matches = []
-        for match in matches:
-            if match not in seen_tests:
-                seen_tests.add(match)
-                unique_matches.append(match)
-        
-        console.print(f"[dim]DEBUG: Unique failed tests: {unique_matches}[/dim]")
-        
-        # Process each failed test
+        for m in matches:
+            if m not in seen:
+                seen.add(m)
+                unique_matches.append(m)
+
+        console.print(f"[dim]DEBUG (pytest): Unique failed tests: {unique_matches}[/dim]")
+
         for test_function_name in unique_matches:
-            console.print(f"[dim]DEBUG: Processing failed test: {test_function_name}[/dim]")
-            
-            # ✅ Extract the original function name from test name
-            # test_reverse_string_empty -> reverse_string
-            # test_word_count_normal -> word_count
-            original_function = self._extract_function_name_from_test(test_function_name, functions)
-            
-            console.print(f"[dim]DEBUG: Matched to original function: {original_function}[/dim]")
-            
-            # Extract error details for this specific test
+            original_function = self._extract_function_name_from_test(
+                test_function_name, functions
+            )
             error_snippet = self._extract_error_snippet(output, test_function_name)
-            
-            failed_info['failed_tests'].append({
-                'test_name': test_function_name,
-                'original_function': original_function,
-                'file': file_path,
-                'error_snippet': error_snippet
-            })
-            
-            if original_function and original_function != 'Unknown' and original_function not in failed_info['functions']:
-                failed_info['functions'].append(original_function)
-        
-        console.print(f"[green]DEBUG: Extracted {len(failed_info['failed_tests'])} failed tests[/green]")
-        console.print(f"[green]DEBUG: Affected functions: {failed_info['functions']}[/green]")
-        
+
+            failed_info["failed_tests"].append(
+                {
+                    "test_name": test_function_name,
+                    "original_function": original_function,
+                    "file": file_path,
+                    "error_snippet": error_snippet,
+                }
+            )
+
+            if (
+                original_function
+                and original_function != "Unknown"
+                and original_function not in failed_info["functions"]
+            ):
+                failed_info["functions"].append(original_function)
+
+        console.print(
+            f"[green]DEBUG (pytest): "
+            f"{len(failed_info['failed_tests'])} failed tests, "
+            f"affected functions: {failed_info['functions']}[/green]"
+        )
         return failed_info
+
+    def _match_jest_title_to_function(
+        self,
+        title: str,
+        ancestor_titles: List[str],
+        functions: List[Dict],
+    ) -> str:
+        """
+        Map a Jest test title (and its describe() ancestor chain) back to
+        a source function name.
+
+        Strategy (most-specific first):
+          1. Exact match on an ancestor title (the describe() block name
+             is typically the function name in LLM-generated tests).
+          2. Any function name found inside the ancestor title.
+          3. Any function name found inside the test title.
+          4. Progressive word-removal on the test title.
+        """
+        func_names = [f["name"] for f in functions]
+
+        # 1. Exact ancestor match
+        for ancestor in ancestor_titles:
+            if ancestor in func_names:
+                return ancestor
+
+        # 2. Function name substring in ancestor
+        for ancestor in ancestor_titles:
+            for name in func_names:
+                if name in ancestor or ancestor in name:
+                    return name
+
+        # 3. Function name substring in test title
+        for name in func_names:
+            if name in title:
+                return name
+
+        # 4. Progressive word removal on the test title
+        #    "should reverse an empty string" → try each word combination
+        words = re.sub(r"[^a-zA-Z0-9_]", "_", title).split("_")
+        words = [w for w in words if w]
+        for length in range(len(words), 0, -1):
+            for start in range(len(words) - length + 1):
+                candidate = "_".join(words[start : start + length])
+                if candidate in func_names:
+                    return candidate
+
+        return "Unknown"
 
     def _extract_function_name_from_test(self, test_name: str, functions: List[Dict]) -> str:
         """
@@ -1554,8 +1661,8 @@ class TestAgent:
         if results['failed_tests']:
             self._display_failed_tests_table(results['failed_tests'])
         
-        if results.get('debugging_suggestions'):
-            self._display_debugging_suggestions(results['debugging_suggestions'])
+        # if results.get('debugging_suggestions'):
+        #     self._display_debugging_suggestions(results['debugging_suggestions'])
     
     def _display_failed_tests_table(self, failed_tests: List[Dict]):
         """Display failed tests table"""
@@ -1576,19 +1683,19 @@ class TestAgent:
         console.print(failed_table)
         console.print()
     
-    def _display_debugging_suggestions(self, suggestions: List[str]):
-        """Display debugging suggestions"""
-        suggestions_text = "\n".join(suggestions)
+    # def _display_debugging_suggestions(self, suggestions: List[str]):
+    #     """Display debugging suggestions"""
+    #     suggestions_text = "\n".join(suggestions)
         
-        suggestions_panel = Panel(
-            suggestions_text,
-            title="[bold yellow]💡 Debugging Suggestions[/bold yellow]",
-            border_style="yellow",
-            padding=(1, 2)
-        )
+    #     suggestions_panel = Panel(
+    #         suggestions_text,
+    #         title="[bold yellow]💡 Debugging Suggestions[/bold yellow]",
+    #         border_style="yellow",
+    #         padding=(1, 2)
+    #     )
         
-        console.print(suggestions_panel)
-        console.print()
+    #     console.print(suggestions_panel)
+    #     console.print()
     
     def _prompt_for_debugging(self, results: Dict[str, Any]):
         """Prompt for debugging"""
