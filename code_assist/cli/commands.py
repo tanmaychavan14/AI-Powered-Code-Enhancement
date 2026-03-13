@@ -57,7 +57,7 @@ class SimplifiedCLI:
             '2': {'name': 'Code Refactoring', 'emoji': '🔧', 'desc': 'Improve and optimize code structure'},
             '3': {'name': 'Debug Assistant', 'emoji': '🐛', 'desc': 'Find and fix bugs in your code'},
             '4': {'name': 'Documentation', 'emoji': '📚', 'desc': 'Generate docs and comments'},
-            '5': {'name': 'Code Analysis', 'emoji': '🔍', 'desc': 'Analyze and parse code structure'},
+           
             
         }
     

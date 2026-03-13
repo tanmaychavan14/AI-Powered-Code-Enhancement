@@ -1923,6 +1923,7 @@ You are an expert Python test engineer. Generate comprehensive pytest test cases
 # {chr(10).join(function_details)}
 
 # For EACH function above, create tests that:
+#- 5-6 tests per function
 # - Test normal operation with typical inputs
 # - Test edge cases (empty inputs, boundary values)
 # - Test error conditions (invalid inputs, exceptions)
@@ -1969,7 +1970,7 @@ CRITICAL: Structure the file as:
 
 REQUIREMENTS:
 - Self-contained file (no imports)
-- 3-5 tests per function
+- 5-6 tests per function
 - Use describe() and test()
 - Real assertions with expect()
 
