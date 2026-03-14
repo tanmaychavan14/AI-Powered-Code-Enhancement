@@ -316,28 +316,28 @@ class OutputAgent:
         self.console.print()
         
         # ✅ Add visual summary panel
-        if total_components > 0:
-            success_rate = (passed / max(total_executed, 1) * 100)
-            success_color = "green" if success_rate >= 80 else "yellow"
+#         if total_components > 0:
+#             success_rate = (passed / max(total_executed, 1) * 100)
+#             success_color = "green" if success_rate >= 80 else "yellow"
             
-            summary_text = f"""
-[bold cyan]📈 Coverage Summary[/bold cyan]
+#             summary_text = f"""
+# [bold cyan]📈 Coverage Summary[/bold cyan]
 
-• Analyzed [yellow]{functions_tested} function(s)[/yellow] + [yellow]{classes_tested} class(es)[/yellow]
-• Generated [green]{generated} test case(s)[/green]
-• Average: [blue]~{avg_tests} tests per component[/blue]
-• Executed: [cyan]{total_executed} test(s)[/cyan]
-• Success Rate: [{success_color}]{success_rate:.1f}%[/{success_color}]
-            """
+# • Analyzed [yellow]{functions_tested} function(s)[/yellow] + [yellow]{classes_tested} class(es)[/yellow]
+# • Generated [green]{generated} test case(s)[/green]
+# • Average: [blue]~{avg_tests} tests per component[/blue]
+# • Executed: [cyan]{total_executed} test(s)[/cyan]
+# • Success Rate: [{success_color}]{success_rate:.1f}%[/{success_color}]
+#             """
             
-            summary_panel = Panel(
-                summary_text.strip(),
-                title="[bold blue]Test Coverage Overview[/bold blue]",
-                border_style="blue",
-                padding=(1, 2)
-            )
-            self.console.print(summary_panel)
-            self.console.print()
+#             summary_panel = Panel(
+#                 summary_text.strip(),
+#                 title="[bold blue]Test Coverage Overview[/bold blue]",
+#                 border_style="blue",
+#                 padding=(1, 2)
+#             )
+#             self.console.print(summary_panel)
+#             self.console.print()
     
     def _display_test_files(self, results: Dict[str, Any]) -> None:
         """Display generated test files"""
@@ -774,13 +774,13 @@ class OutputAgent:
      self._display_refactor_project_summary(results)
     
     # 2. Refactoring Statistics
-     self._display_refactor_statistics(results)
+    #  self._display_refactor_statistics(results)
     
     # 3. Refactored Files
      self._display_refactored_files(results)
     
     # 4. Improvements Made
-     self._display_improvements(results)
+    #  self._display_improvements(results)
     
     # 5. Code Smells Fixed
      self._display_code_smells_fixed(results)
@@ -1092,7 +1092,7 @@ class OutputAgent:
      self._display_documentation_summary(results)
     
     # 2. Documentation Statistics
-     self._display_documentation_statistics(results)
+    #  self._display_documentation_statistics(results)
     
     # 3. Generated Documentation Files
      self._display_documentation_files(results)

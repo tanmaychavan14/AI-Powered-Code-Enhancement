@@ -1,12 +1,4 @@
-// For Jest to properly mock the 'axios' module, we declare it at the top of the test file.
-// This ensures that when the copied code below calls `require("axios")`, it receives our mock
-// instead of the real axios library, preventing actual network requests during tests.
-jest.mock('axios', () => ({
-  get: jest.fn(), // Mock the .get method of axios
-}));
-
-// --- Start of Function Implementations (Copied Verbatim) ---
-const axios = require("axios"); // This will now resolve to the mocked axios object.
+const axios = require("axios");
 
 async function fetchUser() {
     const response = await axios.get("https://jsonplaceholder.typicode.com/users/1");
@@ -14,101 +6,118 @@ async function fetchUser() {
 }
 
 module.exports = { fetchUser };
-// --- End of Function Implementations ---
 
+// Jest Test Cases
+// Mock the axios module to prevent actual API calls during tests
+jest.mock("axios");
 
-// --- Start of Jest Test Cases ---
 describe('fetchUser', () => {
-    // Before each test, we clear any previous mock calls and reset mock implementations.
-    // This ensures that tests are isolated and do not affect each other's mock states.
+    // Clear all mock implementations before each test to ensure test isolation
     beforeEach(() => {
-        axios.get.mockClear(); // Clears information about calls to the mock function
+        axios.get.mockClear();
     });
 
-    // Test Case 1: Verifies that fetchUser returns the correct user name on a successful API call.
-    test('should return the name of the user on a successful API call', async () => {
-        // Arrange: Define the mock response data for a successful API call.
+    // Test Case 1: Successfully fetches a user's name
+    test('should return the user name on a successful API call', async () => {
         const mockUserData = {
-            id: 1,
-            name: 'Leanne Graham',
-            username: 'Bret',
-            email: 'Sincere@april.biz',
-            address: { street: 'Kulas Light', suite: 'Apt. 556' },
-            phone: '1-770-736-8031 x56442',
-            website: 'hildegard.org',
-            company: { name: 'Romaguera-Crona' },
+            data: {
+                id: 1,
+                name: "Leanne Graham",
+                username: "Bret",
+                email: "Sincere@april.biz",
+                address: {
+                    street: "Kulas Light",
+                    suite: "Apt. 556",
+                    city: "Gwenborough",
+                    zipcode: "92998-3874",
+                    geo: { lat: "-37.3159", lng: "81.1496" }
+                },
+                phone: "1-770-736-8031 x56442",
+                website: "hildegard.org",
+                company: {
+                    name: "Romaguera-Crona",
+                    catchPhrase: "Multi-layered client-server neural-net",
+                    bs: "harness real-time e-markets"
+                }
+            },
         };
-        // Set the mock implementation for axios.get to resolve with our mock data.
-        axios.get.mockResolvedValue({ data: mockUserData });
+        axios.get.mockResolvedValue(mockUserData);
 
-        // Act: Call the function under test.
-        const result = await fetchUser();
+        const userName = await fetchUser();
 
-        // Assert: Verify the function's output and that axios.get was called correctly.
-        expect(result).toBe('Leanne Graham');
         expect(axios.get).toHaveBeenCalledTimes(1);
-        expect(axios.get).toHaveBeenCalledWith('https://jsonplaceholder.typicode.com/users/1');
+        expect(axios.get).toHaveBeenCalledWith("https://jsonplaceholder.typicode.com/users/1");
+        expect(userName).toBe("Leanne Graham");
     });
 
-    // Test Case 2: Checks if fetchUser handles different valid user data correctly.
-    test('should correctly extract name for different user data', async () => {
-        // Arrange: Define mock data for a different user.
-        const mockUserData = {
-            id: 2,
-            name: 'Ervin Howell',
-            username: 'Antonette',
-            email: 'Shanna@melissa.tv',
-        };
-        axios.get.mockResolvedValue({ data: mockUserData });
-
-        // Act
-        const result = await fetchUser();
-
-        // Assert
-        expect(result).toBe('Ervin Howell');
-        expect(axios.get).toHaveBeenCalledTimes(1);
-        expect(axios.get).toHaveBeenCalledWith('https://jsonplaceholder.typicode.com/users/1');
-    });
-
-    // Test Case 3: Ensures fetchUser correctly propagates errors when the API call fails.
+    // Test Case 2: Handles API call failure (e.g., network error, server error)
     test('should throw an error if the API call fails', async () => {
-        // Arrange: Set the mock to reject with an error, simulating a network or server error.
-        const errorMessage = 'Network Error: Request failed with status code 500';
+        const errorMessage = "Network Error: Could not connect to API";
         axios.get.mockRejectedValue(new Error(errorMessage));
 
-        // Act & Assert: Expect the function to throw the specified error.
         await expect(fetchUser()).rejects.toThrow(errorMessage);
         expect(axios.get).toHaveBeenCalledTimes(1);
-        expect(axios.get).toHaveBeenCalledWith('https://jsonplaceholder.typicode.com/users/1');
+        expect(axios.get).toHaveBeenCalledWith("https://jsonplaceholder.typicode.com/users/1");
     });
 
-    // Test Case 4: Handles scenarios where the API response data is missing the 'name' property.
-    test('should throw an error if the response data is missing the name property', async () => {
-        // Arrange: Mock a response where 'data' exists, but the 'name' property is absent.
+    // Test Case 3: Handles response where the 'name' property is missing
+    test('should return undefined if the "name" property is missing from the response data', async () => {
         const mockUserDataWithoutName = {
-            id: 1,
-            username: 'Bret',
-            email: 'Sincere@april.biz',
+            data: {
+                id: 1,
+                username: "Bret",
+                email: "Sincere@april.biz",
+            },
         };
-        axios.get.mockResolvedValue({ data: mockUserDataWithoutName });
+        axios.get.mockResolvedValue(mockUserDataWithoutName);
 
-        // Act & Assert: Expect a TypeError because `response.data.name` would be `undefined`.
+        const userName = await fetchUser();
+
+        expect(axios.get).toHaveBeenCalledTimes(1);
+        expect(userName).toBeUndefined(); // Accessing a non-existent property returns undefined
+    });
+
+    // Test Case 4: Handles response where 'data' object itself is null or undefined
+    test('should throw a TypeError if response.data is null or undefined', async () => {
+        // Scenario A: response.data is null
+        axios.get.mockResolvedValue({ data: null });
+        await expect(fetchUser()).rejects.toThrow(TypeError);
+        await expect(fetchUser()).rejects.toThrow("Cannot read properties of null (reading 'name')");
+        expect(axios.get).toHaveBeenCalledTimes(1); // Only one call for the first expect
+
+        axios.get.mockClear(); // Clear mock for the next scenario
+        // Scenario B: response.data is undefined (e.g., axios resolved with an empty object)
+        axios.get.mockResolvedValue({}); // Effectively makes response.data undefined
         await expect(fetchUser()).rejects.toThrow(TypeError);
         await expect(fetchUser()).rejects.toThrow("Cannot read properties of undefined (reading 'name')");
         expect(axios.get).toHaveBeenCalledTimes(1);
-        expect(axios.get).toHaveBeenCalledWith('https://jsonplaceholder.typicode.com/users/1');
     });
 
-    // Test Case 5: Handles scenarios where the API returns null for the data property.
-    test('should throw an error if the API returns null data', async () => {
-        // Arrange: Mock a response where the entire 'data' property is null.
-        axios.get.mockResolvedValue({ data: null });
+    // Test Case 5: Ensures the correct URL is used for the API call
+    test('should call axios.get with the specific user URL', async () => {
+        const mockUserData = { data: { name: "Another User" } };
+        axios.get.mockResolvedValue(mockUserData);
 
-        // Act & Assert: Expect a TypeError because `response.data` would be null.
-        await expect(fetchUser()).rejects.toThrow(TypeError);
-        await expect(fetchUser()).rejects.toThrow("Cannot read properties of null (reading 'name')");
+        await fetchUser();
+
         expect(axios.get).toHaveBeenCalledTimes(1);
-        expect(axios.get).toHaveBeenCalledWith('https://jsonplaceholder.typicode.com/users/1');
+        expect(axios.get).toHaveBeenCalledWith("https://jsonplaceholder.typicode.com/users/1");
+    });
+
+    // Test Case 6: Handles a valid scenario where the user's name is an empty string
+    test('should return an empty string if the user name is an empty string', async () => {
+        const mockUserData = {
+            data: {
+                id: 1,
+                name: "",
+                username: "Bret",
+            },
+        };
+        axios.get.mockResolvedValue(mockUserData);
+
+        const userName = await fetchUser();
+
+        expect(axios.get).toHaveBeenCalledTimes(1);
+        expect(userName).toBe("");
     });
 });
-// --- End of Jest Test Cases ---
