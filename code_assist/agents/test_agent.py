@@ -557,25 +557,48 @@ class TestAgent:
         # if results.get('debugging_suggestions'):
         #     self._display_debugging_suggestions(results['debugging_suggestions'])
     
+    # def _display_failed_tests_table(self, failed_tests: List[Dict]):
+    #     """Display failed tests table"""
+    #     console.print("\n[bold red]❌ FAILED TESTS DETAILS[/bold red]\n")
+        
+    #     failed_table = Table(title="Failed Test Cases", border_style="red")
+    #     failed_table.add_column("Test Case", style="yellow", width=25)
+    #     failed_table.add_column("Original Function", style="cyan", width=25)
+    #     failed_table.add_column("Error Info", style="red", width=40)
+        
+    #     for failed_test in failed_tests[:10]:
+    #         failed_table.add_row(
+    #             failed_test['test_name'],
+    #             failed_test['original_function'],
+    #             failed_test['error_snippet'][:80] + "..."
+    #         )
+        
+    #     console.print(failed_table)
+    #     console.print()
     def _display_failed_tests_table(self, failed_tests: List[Dict]):
-        """Display failed tests table"""
-        console.print("\n[bold red]❌ FAILED TESTS DETAILS[/bold red]\n")
-        
-        failed_table = Table(title="Failed Test Cases", border_style="red")
-        failed_table.add_column("Test Case", style="yellow", width=25)
-        failed_table.add_column("Original Function", style="cyan", width=25)
-        failed_table.add_column("Error Info", style="red", width=40)
-        
-        for failed_test in failed_tests[:10]:
+       """Display failed tests table"""
+       console.print("\n[bold red]❌ FAILED TESTS DETAILS[/bold red]\n")
+    
+       failed_table = Table(
+        title="Failed Test Cases",
+        border_style="red",
+        show_lines=True,        # ← adds line between each row
+        expand=True             # ← expands to full terminal width
+       )
+    
+       failed_table.add_column("Test Case", style="yellow", ratio=2, overflow="fold", no_wrap=False)
+       failed_table.add_column("Original Function", style="cyan", ratio=2, overflow="fold", no_wrap=False)
+       failed_table.add_column("Error Info", style="red", ratio=3, overflow="fold", no_wrap=False)
+    
+       for failed_test in failed_tests[:10]:
             failed_table.add_row(
                 failed_test['test_name'],
                 failed_test['original_function'],
-                failed_test['error_snippet'][:80] + "..."
+                failed_test['error_snippet'][:150]  # ← removed the + "..." hardcut
             )
-        
-        console.print(failed_table)
-        console.print()
     
+       console.print(failed_table)
+       console.print()
     # def _display_debugging_suggestions(self, suggestions: List[str]):
     #     """Display debugging suggestions"""
     #     suggestions_text = "\n".join(suggestions)
